@@ -1,25 +1,50 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.5.002.0
+VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "websocket-rpc-net", "src\websocket-rpc-net\websocket-rpc-net.csproj", "{7EFF19A5-05EC-4E39-97D1-666DF1BF9CB9}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{78C357C7-6A74-4B51-B689-13B49471428C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "websocket-rpc-net", "src\websocket-rpc-net\websocket-rpc-net.csproj", "{1516D8D0-95B7-42F5-99AD-36692ECB7CD3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "websocket-rpc-net-generators", "src\websocket-rpc-net-generators\websocket-rpc-net-generators.csproj", "{61B9854C-DE9F-4EC3-A5EE-3F2107036741}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{43F9E6AE-4C0F-4BA5-A285-750D7088D246}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "sample-app", "tests\sample-app\sample-app.csproj", "{1E941443-0326-49DE-B7FE-E584AF355C2C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "generator-tests", "tests\generator-tests\generator-tests.csproj", "{9D6763F8-8214-45FD-A958-2CBBFF31FB39}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
-	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{7EFF19A5-05EC-4E39-97D1-666DF1BF9CB9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{7EFF19A5-05EC-4E39-97D1-666DF1BF9CB9}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{7EFF19A5-05EC-4E39-97D1-666DF1BF9CB9}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{7EFF19A5-05EC-4E39-97D1-666DF1BF9CB9}.Release|Any CPU.Build.0 = Release|Any CPU
-	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
-	GlobalSection(ExtensibilityGlobals) = postSolution
-		SolutionGuid = {C802BCA7-F1C8-4EA4-9AA2-18AE400DD82E}
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{1516D8D0-95B7-42F5-99AD-36692ECB7CD3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1516D8D0-95B7-42F5-99AD-36692ECB7CD3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1516D8D0-95B7-42F5-99AD-36692ECB7CD3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1516D8D0-95B7-42F5-99AD-36692ECB7CD3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{61B9854C-DE9F-4EC3-A5EE-3F2107036741}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{61B9854C-DE9F-4EC3-A5EE-3F2107036741}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{61B9854C-DE9F-4EC3-A5EE-3F2107036741}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{61B9854C-DE9F-4EC3-A5EE-3F2107036741}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1E941443-0326-49DE-B7FE-E584AF355C2C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1E941443-0326-49DE-B7FE-E584AF355C2C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1E941443-0326-49DE-B7FE-E584AF355C2C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1E941443-0326-49DE-B7FE-E584AF355C2C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9D6763F8-8214-45FD-A958-2CBBFF31FB39}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9D6763F8-8214-45FD-A958-2CBBFF31FB39}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9D6763F8-8214-45FD-A958-2CBBFF31FB39}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9D6763F8-8214-45FD-A958-2CBBFF31FB39}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{1516D8D0-95B7-42F5-99AD-36692ECB7CD3} = {78C357C7-6A74-4B51-B689-13B49471428C}
+		{61B9854C-DE9F-4EC3-A5EE-3F2107036741} = {78C357C7-6A74-4B51-B689-13B49471428C}
+		{1E941443-0326-49DE-B7FE-E584AF355C2C} = {43F9E6AE-4C0F-4BA5-A285-750D7088D246}
+		{9D6763F8-8214-45FD-A958-2CBBFF31FB39} = {43F9E6AE-4C0F-4BA5-A285-750D7088D246}
 	EndGlobalSection
 EndGlobal

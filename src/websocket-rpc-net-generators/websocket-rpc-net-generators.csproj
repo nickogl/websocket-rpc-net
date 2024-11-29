@@ -17,8 +17,4 @@
   <ItemGroup>
     <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
   </ItemGroup>
-
-  <ItemGroup>
-    <Compile Include="..\websocket-rpc-net\Attributes\**\*.cs" />
-  </ItemGroup>
 </Project>

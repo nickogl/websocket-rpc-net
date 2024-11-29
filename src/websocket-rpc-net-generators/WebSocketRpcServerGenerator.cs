@@ -1,7 +1,6 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
-using Nickogl.WebSockets.Rpc.Attributes;
 using System.Text;
 
 namespace Nickogl.WebSockets.Rpc.Generators;
@@ -33,11 +32,11 @@ public class WebSocketRpcServerGenerator : IIncrementalGenerator
 		var serverNode = (InterfaceDeclarationSyntax)context.Node;
 		if (context.SemanticModel.GetDeclaredSymbol(serverNode) is not INamedTypeSymbol serverSymbol ||
 			!serverSymbol.Name.StartsWith("I") ||
-			!TryExtractServerMetadata(serverSymbol, out var metadata) ||
-			!TryExtractMethods(serverSymbol, out var serverMethods) ||
 			!TryExtractClientSymbol(serverSymbol, out var clientSymbol) ||
 			!clientSymbol.Name.StartsWith("I") ||
-			!TryExtractMethods(clientSymbol, out var clientMethods))
+			!TryExtractServerMetadata(serverSymbol, out var metadata) ||
+			!TryExtractMethods(serverSymbol, requiredFirstParameter: clientSymbol, out var serverMethods) ||
+			!TryExtractMethods(clientSymbol, requiredFirstParameter: null, out var clientMethods))
 		{
 			return null;
 		}
@@ -82,9 +81,9 @@ public class WebSocketRpcServerGenerator : IIncrementalGenerator
 		return false;
 	}
 
-	private static bool TryExtractServerMetadata(INamedTypeSymbol interfaceSymbol, out WebSocketRpcServerAttribute metadata)
+	private static bool TryExtractServerMetadata(INamedTypeSymbol interfaceSymbol, out WebSocketRpcServerBlueprint.ServerMetadata metadata)
 	{
-		metadata = new WebSocketRpcServerAttribute();
+		metadata = default;
 
 		foreach (var attribute in interfaceSymbol.GetAttributes())
 		{
@@ -93,13 +92,14 @@ public class WebSocketRpcServerGenerator : IIncrementalGenerator
 				continue;
 			}
 
+			WebSocketRpcServerBlueprint.ParameterSerializationMode? serializationMode = null;
 			foreach (var args in attribute.NamedArguments)
 			{
-				if (args.Key == nameof(WebSocketRpcServerAttribute.ParameterSerializationMode))
+				if (args.Key == "ParameterSerializationMode")
 				{
-					if (args.Value.Value is ParameterSerializationMode parameterSerializationMode)
+					if (args.Value.Value is int mode)
 					{
-						metadata.ParameterSerializationMode = parameterSerializationMode;
+						serializationMode = (WebSocketRpcServerBlueprint.ParameterSerializationMode)mode;
 					}
 					else
 					{
@@ -108,6 +108,13 @@ public class WebSocketRpcServerGenerator : IIncrementalGenerator
 					}
 				}
 			}
+			if (serializationMode == null)
+			{
+				// Invalid attribute usage, abort source generation
+				return false;
+			}
+
+			metadata = new WebSocketRpcServerBlueprint.ServerMetadata(serializationMode.Value);
 			return true;
 		}
 
@@ -115,7 +122,7 @@ public class WebSocketRpcServerGenerator : IIncrementalGenerator
 		return false;
 	}
 
-	private static bool TryExtractMethods(INamedTypeSymbol interfaceSymbol, out IReadOnlyCollection<WebSocketRpcServerBlueprint.Method> methods)
+	private static bool TryExtractMethods(INamedTypeSymbol interfaceSymbol, INamedTypeSymbol? requiredFirstParameter, out List<WebSocketRpcServerBlueprint.Method> methods)
 	{
 		methods = [];
 
@@ -126,6 +133,7 @@ public class WebSocketRpcServerGenerator : IIncrementalGenerator
 				continue;
 			}
 
+			WebSocketRpcServerBlueprint.MethodMetadata? metadata = null;
 			foreach (var attribute in methodSymbol.GetAttributes())
 			{
 				if (attribute.AttributeClass?.ToDisplayString() != "Nickogl.WebSockets.Rpc.Attributes.WebSocketRpcMethodAttribute")
@@ -139,8 +147,63 @@ public class WebSocketRpcServerGenerator : IIncrementalGenerator
 					// Invalid attribute usage, abort source generation
 					return false;
 				}
-
+				metadata = new WebSocketRpcServerBlueprint.MethodMetadata(methodKey);
 			}
+			if (metadata == null)
+			{
+				// Unrelated interface method, skip
+				continue;
+			}
+			if (methodSymbol.TypeParameters.Length > 0)
+			{
+				// Generic RPC methods not supported, abort source generation
+				return false;
+			}
+			if (requiredFirstParameter != null && methodSymbol.Parameters.Length == 0)
+			{
+				// Server method must have at least one parameter taking the client calling it, abort source generation
+				return false;
+			}
+
+			WebSocketRpcServerBlueprint.MethodReturnType returnType;
+			if (methodSymbol.ReturnsVoid)
+			{
+				returnType = WebSocketRpcServerBlueprint.MethodReturnType.Void;
+			}
+			else if (methodSymbol.ReturnType.Name == typeof(ValueTask).Name) // netstandard2.0 does not include ValueTask
+			{
+				returnType = WebSocketRpcServerBlueprint.MethodReturnType.ValueTask;
+			}
+			else if (methodSymbol.ReturnType.ToDisplayString() == typeof(Task).FullName)
+			{
+				returnType = WebSocketRpcServerBlueprint.MethodReturnType.Task;
+			}
+			else
+			{
+				// Unsupported return type, abort source generation
+				return false;
+			}
+
+			var parameterTypes = new List<string>(capacity: methodSymbol.Parameters.Length);
+			for (int i = 0; i < methodSymbol.Parameters.Length; i++)
+			{
+				// TODO: support validation through data annotations?
+				var fullyQualifiedTypeName = methodSymbol.Parameters[i].Type.ToDisplayString();
+				if (i == 0 && requiredFirstParameter != null)
+				{
+					if (requiredFirstParameter?.ToDisplayString() != fullyQualifiedTypeName)
+					{
+						// First parameter of a server method must be the client calling it, abort source generation
+						return false;
+					}
+				}
+				else
+				{
+					parameterTypes.Add(fullyQualifiedTypeName);
+				}
+			}
+
+			methods.Add(new WebSocketRpcServerBlueprint.Method(methodSymbol.Name, returnType, parameterTypes, metadata.Value));
 		}
 
 		// TBD: is having a unidirectional websocket a valid use case?

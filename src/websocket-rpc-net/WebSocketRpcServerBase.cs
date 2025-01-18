@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Net.WebSockets;
 
 namespace Nickogl.WebSockets.Rpc;
@@ -8,12 +9,33 @@ namespace Nickogl.WebSockets.Rpc;
 /// <typeparam name="T">Type of the corresponding websocket-rpc client.</typeparam>
 public abstract class WebSocketRpcServerBase<T> where T : IWebSocketRpcClient
 {
-	/// <summary>
-	/// Called when the server has received a websocket-rpc message from a client.
-	/// </summary>
-	/// <param name="message">Raw message data sent by the client.</param>
-	/// <exception cref="WebSocketRpcMessageException">Client sent an invalid websocket-rpc message.</exception>
-	protected abstract ValueTask OnMessageAsync(T client, Span<byte> message);
+	/// <summary>Time after which connections are closed if they fail to acknowledge ping frames.</summary>
+	protected virtual TimeSpan? ConnectionTimeout { get; }
+
+	/// <summary>Array pool to use for allocating buffers.</summary>
+	protected virtual ArrayPool<byte> Allocator { get; } = ArrayPool<byte>.Shared;
+
+	/// <summary>Size of the message buffer in bytes. Defaults to 8 KiB.</summary>
+	/// <remarks>
+	/// Choose one that the vast majority of messages will fit into.
+	/// If a message does not fit, the buffer grows exponentially until <see cref="MaximumMessageSize"/> is reached.
+	/// If you are unsure, choose a generous value first and then consult the recorded metrics to refine it.
+	/// </remarks>
+	protected virtual int MessageBufferSize { get; } = 1024 * 8;
+
+	/// <summary>Maximum size of messages. Defaults to 64 KiB.</summary>
+	/// <remarks>
+	/// Choose one that all legit messages will fit into.
+	/// If you are unsure, choose a generous value first and then consult the recorded metrics to refine it.
+	/// </remarks>
+	protected virtual int MaximumMessageSize { get; } = 1024 * 64;
+
+	/// <summary>Maximum size of parameters. Defaults to 4 KiB.</summary>
+	/// <remarks>
+	/// Choose one that all parameters of legit messages will fit into.
+	/// If you are unsure, choose a generous value first and then consult the recorded metrics to refine it.
+	/// </remarks>
+	protected virtual int MaximumParameterSize { get; } = 1024 * 4;
 
 	/// <summary>
 	/// Called when a client has connected to the server.
@@ -34,20 +56,4 @@ public abstract class WebSocketRpcServerBase<T> where T : IWebSocketRpcClient
 	/// <param name="webSocket">Websocket to use for the client.</param>
 	/// <returns>A client instance to use with this server.</returns>
 	public abstract T CreateClient(WebSocket webSocket);
-
-	/// <summary>
-	/// Process a client's websocket messages until it disconnects or the provided
-	/// <see cref="cancellationToken"/> is cancelled.
-	/// </summary>
-	/// <param name="client">Client whose websocket messages to process.</param>
-	/// <param name="cancellationToken">Cancellation token to stop processing messages.</param>
-	/// <returns>A task that represents the lifecycle of the provided client.</returns>
-	/// <exception cref="ArgumentException">The <paramref name="client"/> was not created for this server.</exception>
-	/// <exception cref="WebSocketException">An operation on the client's websocket failed.</exception>
-	/// <exception cref="WebSocketRpcMessageException">Invalid websocket-rpc message encountered.</exception>
-	/// <remarks>Override this to provide your own message processing loop.</remarks>
-	public virtual Task ProcessAsync(T client, CancellationToken cancellationToken)
-	{
-		return Task.CompletedTask;
-	}
 }

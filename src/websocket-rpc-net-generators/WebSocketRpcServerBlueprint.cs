@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace Nickogl.WebSockets.Rpc.Generators;
 
 public readonly struct WebSocketRpcServerBlueprint(
@@ -7,7 +9,9 @@ public readonly struct WebSocketRpcServerBlueprint(
 	IReadOnlyCollection<WebSocketRpcServerBlueprint.Method> serverMethods,
 	string clientNamespace,
 	string clientName,
-	IReadOnlyCollection<WebSocketRpcServerBlueprint.Method> clientMethods)
+	IReadOnlyCollection<WebSocketRpcServerBlueprint.Method> clientMethods,
+	IReadOnlyCollection<WebSocketRpcServerBlueprint.Property> clientProperties,
+	IReadOnlyCollection<string> clientNonRpcMethods)
 {
 	public enum ParameterSerializationMode
 	{
@@ -34,10 +38,22 @@ public readonly struct WebSocketRpcServerBlueprint(
 		public int Key { get; } = key;
 	}
 
+	public readonly struct Parameter(string type, string name, string escapedType)
+	{
+		/// <summary>Fully qualified type name of the parameter.</summary>
+		public string Type { get; } = type;
+
+		/// <summary>Name of the parameter.</summary>
+		public string Name { get; } = name;
+
+		/// <summary>Escaped version of <see cref="Type"/> for use in e.g. method names.</summary>
+		public string EscapedType { get; } = escapedType;
+	}
+
 	public readonly struct Method(
 		string name,
 		MethodReturnType returnType,
-		IReadOnlyCollection<string> parameterTypes,
+		IReadOnlyCollection<Parameter> parameters,
 		MethodMetadata metadata)
 	{
 		/// <summary>Name of the RPC method.</summary>
@@ -46,11 +62,23 @@ public readonly struct WebSocketRpcServerBlueprint(
 		/// <summary>Return type of the RPC method.</summary>
 		public MethodReturnType ReturnType { get; } = returnType;
 
-		/// <summary>Fully qualified parameter types of the RPC method.</summary>
-		public IReadOnlyCollection<string> ParameterTypes { get; } = parameterTypes;
+		/// <summary>Parameters of the RPC method.</summary>
+		public IReadOnlyCollection<Parameter> Parameters { get; } = parameters;
 
 		/// <summary>Metadata to customize the source generation.</summary>
 		public MethodMetadata Metadata { get; } = metadata;
+	}
+
+	public readonly struct Property(string type, string name, bool isReadOnly)
+	{
+		/// <summary>Fully qualified type name of the generated property.</summary>
+		public string Type { get; } = type;
+
+		/// <summary>Name of the generated property.</summary>
+		public string Name { get; } = name;
+
+		/// <summary>Whether or not the generated property is read-only.</summary>
+		public bool IsReadOnly { get; } = isReadOnly;
 	}
 
 	/// <summary>Metadata to customize the source generation.</summary>
@@ -73,4 +101,10 @@ public readonly struct WebSocketRpcServerBlueprint(
 
 	/// <summary>Available methods on the client.</summary>
 	public IReadOnlyCollection<Method> ClientMethods { get; } = clientMethods;
+
+	/// <summary>Available state on the client.</summary>
+	public IReadOnlyCollection<Property> ClientProperties { get; } = clientProperties;
+
+	/// <summary>Available non-rpc methods on the client. Generated as-is.</summary>
+	public IReadOnlyCollection<string> ClientNonRpcMethods { get; } = clientNonRpcMethods;
 }

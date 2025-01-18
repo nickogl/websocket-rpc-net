@@ -5,7 +5,7 @@ namespace Nickogl.WebSockets.Rpc;
 /// <summary>
 /// Represents a websocket server to receive remote procedure calls from clients.
 /// </summary>
-/// <remarks>Annotate available methods with <see cref="WebSocketRpcMethodAttribute"/>.</remarks>
+/// <remarks>Annotate available methods with <see cref="Attributes.WebSocketRpcMethodAttribute"/>.</remarks>
 /// <typeparam name="T">Type of the corresponding websocket-rpc client.</typeparam>
 public interface IWebSocketRpcServer<T> where T : IWebSocketRpcClient
 {

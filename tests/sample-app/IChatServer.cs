@@ -3,7 +3,7 @@ using Nickogl.WebSockets.Rpc.Attributes;
 
 namespace SampleApp;
 
-[WebSocketRpcServer]
+[WebSocketRpcServer(ParameterSerializationMode = ParameterSerializationMode.Specialized)]
 public interface IChatServer : IWebSocketRpcServer<IChatClient>
 {
 	[WebSocketRpcMethod(1)]

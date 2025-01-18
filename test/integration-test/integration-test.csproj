@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
-    <RootNamespace>Nickogl.WebSockets.Rpc.GeneratorTests</RootNamespace>
+    <RootNamespace>Nickogl.WebSockets.Rpc.IntegrationTest</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>

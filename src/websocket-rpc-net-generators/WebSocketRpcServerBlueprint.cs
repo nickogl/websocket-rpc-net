@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace Nickogl.WebSockets.Rpc.Generators;
 
 public readonly struct WebSocketRpcServerBlueprint(

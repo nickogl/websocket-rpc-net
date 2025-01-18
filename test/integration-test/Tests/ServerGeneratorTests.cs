@@ -3,7 +3,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Nickogl.WebSockets.Rpc.Generators;
 using Xunit.Abstractions;
 
-namespace Nickogl.WebSockets.Rpc.GeneratorTests;
+namespace Nickogl.WebSockets.Rpc.IntegrationTest.Tests;
 
 public class ServerGeneratorTests(ITestOutputHelper output)
 {

@@ -11,9 +11,11 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "websocket-rpc-net-generator
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{43F9E6AE-4C0F-4BA5-A285-750D7088D246}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "sample-app", "tests\sample-app\sample-app.csproj", "{1E941443-0326-49DE-B7FE-E584AF355C2C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "integration-test", "test\integration-test\integration-test.csproj", "{9D6763F8-8214-45FD-A958-2CBBFF31FB39}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "generator-tests", "tests\generator-tests\generator-tests.csproj", "{9D6763F8-8214-45FD-A958-2CBBFF31FB39}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "sample-app", "sample-app\sample-app.csproj", "{EB61E1D7-AA75-44B6-8F62-CDE86C4FF78B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "websocket-rpc-net-testing", "src\websocket-rpc-net-testing\websocket-rpc-net-testing.csproj", "{4DCB23FF-4ACF-4BF1-AFA2-29F872829C0E}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -32,19 +34,23 @@ Global
 		{61B9854C-DE9F-4EC3-A5EE-3F2107036741}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{61B9854C-DE9F-4EC3-A5EE-3F2107036741}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{61B9854C-DE9F-4EC3-A5EE-3F2107036741}.Release|Any CPU.Build.0 = Release|Any CPU
-		{1E941443-0326-49DE-B7FE-E584AF355C2C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{1E941443-0326-49DE-B7FE-E584AF355C2C}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{1E941443-0326-49DE-B7FE-E584AF355C2C}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{1E941443-0326-49DE-B7FE-E584AF355C2C}.Release|Any CPU.Build.0 = Release|Any CPU
 		{9D6763F8-8214-45FD-A958-2CBBFF31FB39}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{9D6763F8-8214-45FD-A958-2CBBFF31FB39}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9D6763F8-8214-45FD-A958-2CBBFF31FB39}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9D6763F8-8214-45FD-A958-2CBBFF31FB39}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EB61E1D7-AA75-44B6-8F62-CDE86C4FF78B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EB61E1D7-AA75-44B6-8F62-CDE86C4FF78B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EB61E1D7-AA75-44B6-8F62-CDE86C4FF78B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EB61E1D7-AA75-44B6-8F62-CDE86C4FF78B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4DCB23FF-4ACF-4BF1-AFA2-29F872829C0E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4DCB23FF-4ACF-4BF1-AFA2-29F872829C0E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4DCB23FF-4ACF-4BF1-AFA2-29F872829C0E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4DCB23FF-4ACF-4BF1-AFA2-29F872829C0E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{1516D8D0-95B7-42F5-99AD-36692ECB7CD3} = {78C357C7-6A74-4B51-B689-13B49471428C}
 		{61B9854C-DE9F-4EC3-A5EE-3F2107036741} = {78C357C7-6A74-4B51-B689-13B49471428C}
-		{1E941443-0326-49DE-B7FE-E584AF355C2C} = {43F9E6AE-4C0F-4BA5-A285-750D7088D246}
 		{9D6763F8-8214-45FD-A958-2CBBFF31FB39} = {43F9E6AE-4C0F-4BA5-A285-750D7088D246}
+		{4DCB23FF-4ACF-4BF1-AFA2-29F872829C0E} = {78C357C7-6A74-4B51-B689-13B49471428C}
 	EndGlobalSection
 EndGlobal

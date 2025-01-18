@@ -83,7 +83,8 @@ namespace {blueprint.ServerNamespace}
 		{
 			var paramList = string.Join(", ", method.Parameters.Select(param => $"{param.Type} {param.Name}"));
 			stringBuilder.AppendLine(@$"
-		/// <summary>RPC method key: {method.Metadata.Key}</summary>
+		/// <inheritdoc />
+		/// <remarks>RPC method key: {method.Metadata.Key}</remarks>
 		public abstract {MethodReturnTypeToString(method.ReturnType)} {method.Name}({fqClientInterfaceName} client, {paramList});");
 		}
 
@@ -105,7 +106,7 @@ namespace {blueprint.ServerNamespace}
 				int processed = 0;
 				while (!cancellationToken.IsCancellationRequested && client.WebSocket.State != WebSocketState.Open)
 				{{
-					ValueWebSocketReceiveResult result;
+					ValueWebSocketReceiveResult result = default;
 					var buffer = Allocator.Rent(MessageBufferSize);
 					try
 					{{
@@ -136,8 +137,7 @@ namespace {blueprint.ServerNamespace}
 				var lengthVariable = $"{param.Name}Length";
 				stringBuilder.Append($@"{Indent(9)}{GenerateReadInt32(lengthVariable, "Incomplete parameter length", 9)}
 									if ({lengthVariable} > MaximumParameterSize) throw new WebSocketRpcMessageException(""Parameter exceeds maximum length: {param.Name}"");
-									{GenerateReadExactly(lengthVariable, $"var {param.Name}Buffer = {{0}}", "Incomplete parameter data", 9)}
-									var {param.Name} = {deserializationCall}({param.Name}Buffer);");
+									{GenerateReadExactly(lengthVariable, $"var {param.Name} = {deserializationCall}({{0}})", "Incomplete parameter data", 9)}");
 			}
 			stringBuilder.AppendLine(@$"
 									{(isTask ? "await " : "")}{method.Name}(client, {string.Join(", ", method.Parameters.Select(param => param.Name))});
@@ -164,15 +164,44 @@ namespace {blueprint.ServerNamespace}
 		}}");
 
 		// Client implementation
-		stringBuilder.Append(@$"
+		stringBuilder.AppendLine(@$"
 		protected abstract class {clientClassName} : {fqClientInterfaceName}
 		{{
-			private readonly {serverClassName} _server;
+			private readonly {serverClassName} _server;");
 
-			public {clientClassName}({serverClassName} server)
+		// Additional properties
+		foreach (var property in blueprint.ClientProperties)
+		{
+			var setter = property.IsReadOnly ? string.Empty : "set; ";
+			stringBuilder.AppendLine(@$"
+			public abstract {property.Type} {property.Name} {{ get; {setter}}}");
+		}
+
+		// Additional methods
+		foreach (var method in blueprint.ClientNonRpcMethods)
+		{
+			stringBuilder.AppendLine(@$"
+			public abstract {method};");
+		}
+
+		stringBuilder.AppendLine(@$"
+			public WebSocket WebSocket {{ get; }}
+
+			public {clientClassName}({serverClassName} server, WebSocket webSocket)
 			{{
 				_server = server;
+				WebSocket = webSocket;
 			}}");
+
+		// RPC methods
+		foreach (var method in blueprint.ClientMethods)
+		{
+			var paramList = string.Join(", ", method.Parameters.Select(param => $"{param.Type} {param.Name}"));
+			stringBuilder.AppendLine(@$"
+			/// <inheritdoc />
+			/// <remarks>RPC method key: {method.Metadata.Key}</remarks>
+			public {MethodReturnTypeToString(method.ReturnType)} {method.Name}({paramList}) => throw new NotImplementedException();");
+		}
 
 		stringBuilder.AppendLine(@$"
 		}}
@@ -197,7 +226,7 @@ namespace {blueprint.ServerNamespace}
 					if (newLength > MaximumMessageSize) throw new WebSocketRpcMessageException(""Message exceeds maximum size"");
 					Allocator.Return(buffer); buffer = Allocator.Rent(newLength);
 				}}
-				var destination = new Memory<byte>(buffer, read);
+				var destination = new Memory<byte>(buffer, read, buffer.Length - read);
 				result = await client.WebSocket.ReceiveAsync(destination, cancellationToken);
 				if (result.MessageType == WebSocketMessageType.Close) return;
 				else if (result.MessageType != WebSocketMessageType.Binary) throw new WebSocketRpcMessageException($""Invalid message type: {{result.MessageType}}"");

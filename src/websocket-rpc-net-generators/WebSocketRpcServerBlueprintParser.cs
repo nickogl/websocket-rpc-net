@@ -137,7 +137,10 @@ public static class WebSocketRpcServerBlueprintParser
 			}
 			if (metadata == null)
 			{
-				nonRpcMethods.Add(methodSymbol.ToDisplayString());
+				if (methodSymbol.MethodKind == MethodKind.Ordinary)
+				{
+					nonRpcMethods.Add(GetMethodDeclaration(methodSymbol));
+				}
 				continue;
 			}
 			if (methodSymbol.IsGenericMethod)
@@ -172,6 +175,11 @@ public static class WebSocketRpcServerBlueprintParser
 			else
 			{
 				// Unsupported return type, abort source generation
+				return false;
+			}
+			if (requiredFirstParameter == null && returnType != WebSocketRpcServerBlueprint.MethodReturnType.ValueTask)
+			{
+				// Client method must return a ValueTask, abort source generation
 				return false;
 			}
 
@@ -245,5 +253,10 @@ public static class WebSocketRpcServerBlueprintParser
 			}
 		}
 		return escaped.ToString();
+	}
+
+	private static string GetMethodDeclaration(IMethodSymbol symbol)
+	{
+		return $"{symbol.ReturnType.ToDisplayString()} {symbol.Name}({string.Join(", ", symbol.Parameters.Select(param => $"{param.Type.ToDisplayString()} {param.Name}"))})";
 	}
 }

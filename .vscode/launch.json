@@ -1,0 +1,17 @@
+{
+  "configurations": [
+    {
+      "name": "Launch sample app",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/sample-app/bin/Debug/net8.0/sample-app.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "stopAtEntry": false,
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+    }
+  ]
+}

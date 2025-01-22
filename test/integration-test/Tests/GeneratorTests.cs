@@ -1,18 +1,18 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
-using Nickogl.WebSockets.Rpc.Generators;
+using Nickogl.WebSockets.Rpc.Generator;
 using Xunit.Abstractions;
 
 namespace Nickogl.WebSockets.Rpc.IntegrationTest.Tests;
 
-public class ServerGeneratorTests(ITestOutputHelper output)
+public class GeneratorTests(ITestOutputHelper output)
 {
 	private readonly ITestOutputHelper _output = output;
 
 	[Fact]
 	public void GeneratesServerClass()
 	{
-		var generator = new WebSocketRpcServerGenerator();
+		var generator = new WebSocketRpcGenerator();
 		var compilation =
 			CSharpCompilation
 				.Create(nameof(GeneratesServerClass))

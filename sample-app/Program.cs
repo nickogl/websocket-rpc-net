@@ -1,5 +1,9 @@
 using SampleApp;
 using System.Net.WebSockets;
+using System.Runtime.CompilerServices;
+
+// Integration tests cannot both reference the generator project as a library and analyzer, so we expose the marker attributes
+[assembly: InternalsVisibleTo("integration-test")]
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services

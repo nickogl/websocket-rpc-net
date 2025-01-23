@@ -8,19 +8,21 @@ public partial class WebSocketRpcGenerator
 {
 	private static ClientModel? ExtractClientModel(GeneratorSyntaxContext context, CancellationToken cancellationToken)
 	{
-		if (context.SemanticModel.GetDeclaredSymbol(context.Node) is not INamedTypeSymbol symbol)
-		{
-			return null;
-		}
+		return context.SemanticModel.GetDeclaredSymbol(context.Node) is INamedTypeSymbol symbol
+			? ExtractClientModel(symbol, cancellationToken, out _)
+			: null;
+	}
 
-		var metadata = ExtractClientMetadata(symbol);
-		if (metadata == null)
+	private static ClientModel? ExtractClientModel(INamedTypeSymbol symbol, CancellationToken cancellationToken, out ClientMetadata? metadata)
+	{
+		metadata = ExtractClientMetadata(symbol);
+		if (metadata == null || cancellationToken.IsCancellationRequested)
 		{
 			return null;
 		}
 
 		var classModel = ExtractClassModel(symbol);
-		if (classModel == null)
+		if (classModel == null || cancellationToken.IsCancellationRequested)
 		{
 			return null;
 		}
@@ -61,11 +63,6 @@ public partial class WebSocketRpcGenerator
 			GenerateSerializerInterface(context, clientModel.Serializer.Value);
 		}
 
-		var fqSerializerType = clientModel.Serializer == null
-			? null
-			: clientModel.Class.Namespace == clientModel.Serializer.Value.InterfaceNamespace
-				? clientModel.Serializer.Value.InterfaceName
-				: GetFullyQualifiedType(clientModel.Serializer.Value.InterfaceNamespace, clientModel.Serializer.Value.InterfaceName);
 		var clientClass = new StringBuilder(@$"
 #nullable enable
 
@@ -205,17 +202,17 @@ partial class {clientModel.Class.Name} : IDisposable
 		return new(_buffer, 0, _bufferOffset);
 	}}
 ");
-		if (fqSerializerType != null)
+		if (clientModel.Serializer != null)
 		{
 			clientClass.AppendLine(@$"
 	/// <summary>Serializer to serialize and deserialize RPC parameters.</summary>
 	/// <remarks>Initialize this field in the constructor of your class.</remarks>
-	private {fqSerializerType} _serializer;");
+	private {GetFullyQualifiedType(clientModel.Serializer.Value.InterfaceNamespace, clientModel.Serializer.Value.InterfaceName)} _serializer;");
 		}
 		foreach (var method in clientModel.Class.Methods)
 		{
 			clientClass.AppendLine(@$"
-	public partial async ValueTask {method.Name}({string.Join(", ", method.Parameters.Select(param => $"{param.Type} {param.Name}"))})
+	public partial async ValueTask {method.Name}({GenerateParameterList(method.Parameters)})
 	{{
 		__BufferCreate(_messageBufferSize);
 		try
@@ -223,7 +220,7 @@ partial class {clientModel.Class.Name} : IDisposable
 			__BufferWriteMethodKey({method.Key});");
 			foreach (var param in method.Parameters)
 			{
-				clientClass.AppendLine($"\t\t\t__BufferWriteParameter({GenerateSerializeCall(param.Type, clientModel.Serializer, param.Name)});");
+				clientClass.AppendLine($"\t\t\t__BufferWriteParameter(_serializer.{GenerateSerializeCall(param.Type, clientModel.Serializer, param.Name)});");
 			}
 			clientClass.AppendLine(@$"
 			await WebSocket.SendAsync(__BufferGetView(), WebSocketMessageType.Binary, true, Disconnected);
@@ -269,12 +266,12 @@ partial class {clientModel.Class.Name} : IDisposable
 		foreach (var method in clientModel.Class.Methods)
 		{
 			clientClass.AppendLine(@$"
-		public void {method.Name}({string.Join(", ", method.Parameters.Select(param => $"{param.Type} {param.Name}"))})
+		public void {method.Name}({GenerateParameterList(method.Parameters)})
 		{{
 			_client.__BufferWriteMethodKey({method.Key});");
 			foreach (var param in method.Parameters)
 			{
-				clientClass.AppendLine($"\t\t\t_client.__BufferWriteParameter(_client.{GenerateSerializeCall(param.Type, clientModel.Serializer, param.Name)});");
+				clientClass.AppendLine($"\t\t\t_client.__BufferWriteParameter(_client._serializer.{GenerateSerializeCall(param.Type, clientModel.Serializer, param.Name)});");
 			}
 			clientClass.Append("\t\t}");
 		}
@@ -359,7 +356,7 @@ partial class {clientModel.Class.Name} : IDisposable
 		foreach (var method in clientModel.Class.Methods)
 		{
 			clientClass.AppendLine(@$"
-		public void {method.Name}(IEnumerable<{clientModel.Class.Name}> clients, {string.Join(", ", method.Parameters.Select(param => $"{param.Type} {param.Name}"))})
+		public void {method.Name}(IEnumerable<{clientModel.Class.Name}> clients, {GenerateParameterList(method.Parameters)})
 		{{
 			var firstClient = clients.FirstOrDefault();
 			if (firstClient == null)
@@ -369,7 +366,7 @@ partial class {clientModel.Class.Name} : IDisposable
 			foreach (var param in method.Parameters)
 			{
 				clientClass.Append(@$"
-			var {param.Name}Data = firstClient.{GenerateSerializeCall(param.Type, clientModel.Serializer, param.Name)};");
+			var {param.Name}Data = firstClient._serializer.{GenerateSerializeCall(param.Type, clientModel.Serializer, param.Name)};");
 			}
 			clientClass.AppendLine(@$"
 			foreach (var client in clients)

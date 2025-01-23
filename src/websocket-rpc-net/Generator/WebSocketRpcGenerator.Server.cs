@@ -8,19 +8,21 @@ public partial class WebSocketRpcGenerator
 {
 	private static ServerModel? ExtractServerModel(GeneratorSyntaxContext context, CancellationToken cancellationToken)
 	{
-		if (context.SemanticModel.GetDeclaredSymbol(context.Node) is not INamedTypeSymbol symbol)
-		{
-			return null;
-		}
+		return context.SemanticModel.GetDeclaredSymbol(context.Node) is INamedTypeSymbol symbol
+			? ExtractServerModel(symbol, cancellationToken, out _)
+			: null;
+	}
 
-		var metadata = ExtractServerMetadata(symbol);
-		if (metadata == null)
+	private static ServerModel? ExtractServerModel(INamedTypeSymbol symbol, CancellationToken cancellationToken, out ServerMetadata? metadata)
+	{
+		metadata = ExtractServerMetadata(symbol);
+		if (metadata == null || cancellationToken.IsCancellationRequested)
 		{
 			return null;
 		}
 
 		var classModel = ExtractClassModel(symbol, firstParameterType: metadata.ClientType);
-		if (classModel == null)
+		if (classModel == null || cancellationToken.IsCancellationRequested)
 		{
 			return null;
 		}
@@ -71,14 +73,6 @@ public partial class WebSocketRpcGenerator
 			GenerateSerializerInterface(context, serverModel.Serializer.Value);
 		}
 
-		var fqClientType = serverModel.Class.Namespace == serverModel.ClientClassNamespace
-			? serverModel.ClientClassName
-			: GetFullyQualifiedType(serverModel.ClientClassNamespace, serverModel.ClientClassName);
-		var fqSerializerType = serverModel.Serializer == null
-			? null
-			: serverModel.Class.Namespace == serverModel.Serializer.Value.InterfaceNamespace
-				? serverModel.Serializer.Value.InterfaceName
-				: GetFullyQualifiedType(serverModel.Serializer.Value.InterfaceNamespace, serverModel.Serializer.Value.InterfaceName);
 		var serverClass = new StringBuilder(@$"
 using System;
 using System.Buffers;
@@ -119,15 +113,15 @@ partial class {serverModel.Class.Name}
 	/// </remarks>
 	private int _maximumParameterSize = 1024 * 4;
 ");
-		if (fqSerializerType != null)
+		if (serverModel.Serializer != null)
 		{
 			serverClass.AppendLine(@$"
 	/// <summary>Serializer to serialize and deserialize RPC parameters.</summary>
 	/// <remarks>Initialize this field in the constructor of your class.</remarks>
-	private {fqSerializerType} _serializer;");
+	private {GetFullyQualifiedType(serverModel.Serializer.Value.InterfaceNamespace, serverModel.Serializer.Value.InterfaceName)} _serializer;");
 		}
 		serverClass.Append(@$"
-	public async Task ProcessAsync({fqClientType} client, CancellationToken cancellationToken)
+	public async Task ProcessAsync({GetFullyQualifiedType(serverModel.ClientClassNamespace, serverModel.ClientClassName)} client, CancellationToken cancellationToken)
 	{{
 		if (cancellationToken.IsCancellationRequested)
 		{{
@@ -164,10 +158,9 @@ partial class {serverModel.Class.Name}
 						");
 		foreach (var method in serverModel.Class.Methods)
 		{
-			var paramsList = string.Join(", ", method.Parameters.Select(param => param.Name));
 			serverClass.AppendLine(@$"
 							//
-							// {method.Name}({paramsList})
+							// {method.Name}({GenerateParameterList(method.Parameters, types: false)})
 							//
 							case {method.Key}:");
 			foreach (var param in method.Parameters)
@@ -176,10 +169,10 @@ partial class {serverModel.Class.Name}
 				var deserialize = GenerateDeserializeCall(param.Type, serverModel.Serializer, innerExpression: "{0}");
 				serverClass.Append($@"{Indent(8)}{GenerateReadInt32(lengthVariable, "Incomplete parameter length", 8)}
 								if ({lengthVariable} > _maximumParameterSize) throw new InvalidDataException(""Parameter exceeds maximum length: {param.Name}"");
-								{GenerateReadExactly(lengthVariable, $"var {param.Name} = {deserialize}", "Incomplete parameter data", 8)}");
+								{GenerateReadExactly(lengthVariable, $"var {param.Name} = _serializer.{deserialize}", "Incomplete parameter data", 8)}");
 			}
 			serverClass.AppendLine(@$"
-								await {method.Name}(client, {paramsList});
+								await {method.Name}(client, {GenerateParameterList(method.Parameters, types: false)});
 								break;");
 		}
 

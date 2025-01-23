@@ -86,5 +86,101 @@ internal sealed class WebSocketRpcServerAttribute<TClient>(WebSocketRpcSerializa
 	public WebSocketRpcSerializationMode SerializationMode {{ get; }} = serializationMode;
 }}
 #endif");
+
+		context.AddSource("WebSocketRpcTestClientAttribute.g.cs", @$"
+#if !WEBSOCKET_RPC_EXCLUDE_ATTRIBUTES
+using System;
+
+namespace Nickogl.WebSockets.Rpc;
+
+/// <summary>
+/// Generate a websocket-rpc test client for calling methods on the server and
+/// recording calls received from the server.
+/// </summary>
+/// <typeparam name=""TServer"">The websocket-rpc server type under test.</typeparam>
+[AttributeUsage(AttributeTargets.Class)]
+internal sealed class WebSocketRpcTestClientAttribute<TServer> : Attribute
+{{
+}}
+#endif");
+
+		context.AddSource("RpcArgMatcher.g.cs", @$"
+#if !WEBSOCKET_RPC_EXCLUDE_ATTRIBUTES
+using System;
+using System.Collections;
+using System.Linq;
+
+namespace Nickogl.WebSockets.Rpc;
+
+/// <summary>
+/// Match an argument to a remote procedure call. Used to await specific RPC
+/// messages in tests to ensure they are reproducible.
+/// </summary>
+/// <remarks>
+/// Examples:
+/// <para><c>await testClient.Receive.Foo(""ExactValue"")</c></para>
+/// <para><c>await testClient.Receive.Foo(RpcArg.Is&lt;string&gt;(arg => arg.StartsWith(""MatchesValue"")))</c></para>
+/// <para><c>await testClient.Receive.Foo(RpcArg.Any&lt;string&gt;())</c></para>
+/// </remarks>
+/// <typeparam name=""T"">Type of the argument to match.</typeparam>
+public readonly struct RpcArgMatcher<T>(Func<T, bool> predicate) where T : IEquatable<T>
+{{
+	private readonly Func<T, bool> _predicate = predicate;
+
+	public bool Matches(T arg)
+	{{
+		return _predicate(arg);
+	}}
+
+	public static implicit operator RpcArgMatcher<T>(T value)
+	{{
+		return new RpcArgMatcher<T>(arg =>
+		{{
+			if (arg == null && value == null)
+			{{
+				return true;
+			}}
+			if (arg == null || value == null)
+			{{
+				return false;
+			}}
+			if (arg is IEnumerable argList && value is IEnumerable valueList)
+			{{
+				object[] argArray = [.. argList];
+				object[] valueArray = [.. valueList];
+				return argArray.SequenceEqual(valueArray);
+			}}
+			return arg.Equals(value);
+		}});
+	}}
+}}
+
+/// <summary>
+/// Helpers to create instances of <see cref=""RpcArgMatcher{{T}}"" />. Usage similar to <c>NSubstitute</c>.
+/// </summary>
+public static class RpcArg
+{{
+	/// <summary>
+	/// Create a matcher that only intercepts RPC calls if the provided predicate succeeds.
+	/// </summary>
+	/// <param name=""predicate"">Predicate to check the transmitted argument.</param>
+	/// <typeparam name=""T"">Type of the argument to check.</typeparam>
+	/// <returns>An argument matcher for use in <c>await testClient.Receive.Foo(...)</c>.</returns>
+	public static RpcArgMatcher<T> Is<T>(Func<T, bool> predicate) where T : IEquatable<T>
+	{{
+		return new RpcArgMatcher<T>(predicate);
+	}}
+
+	/// <summary>
+	/// Create a matcher that always intercepts RPC calls for this argument.
+	/// </summary>
+	/// <typeparam name=""T"">Type of the argument to check.</typeparam>
+	/// <returns>An argument matcher for use in <c>await testClient.Receive.Foo(...)</c>.</returns>
+	public static RpcArgMatcher<T> Any<T>() where T : IEquatable<T>
+	{{
+		return new RpcArgMatcher<T>(_ => true);
+	}}
+}}
+#endif");
 	}
 }

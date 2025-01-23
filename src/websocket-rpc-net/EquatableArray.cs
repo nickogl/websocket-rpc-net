@@ -28,6 +28,8 @@ internal readonly struct EquatableArray<T> : IEquatable<EquatableArray<T>>, IEnu
 		_array = [.. values];
 	}
 
+	public T this[int index] => _array[index];
+
 	public bool Equals(EquatableArray<T> array)
 	{
 		return AsSpan().SequenceEqual(array.AsSpan());

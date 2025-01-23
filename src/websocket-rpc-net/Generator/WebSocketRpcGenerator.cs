@@ -22,6 +22,12 @@ public sealed partial class WebSocketRpcGenerator : IIncrementalGenerator
 				.Where(model => model is not null);
 		context.RegisterSourceOutput(clients,
 				(context, model) => GenerateClientClass(context, model!.Value));
+
+		var testClients = context.SyntaxProvider
+				.CreateSyntaxProvider(IsServerOrClientCandidate, ExtractTestClientModel)
+				.Where(model => model is not null);
+		context.RegisterSourceOutput(testClients,
+				(context, model) => GenerateTestClientClass(context, model!.Value));
 	}
 
 	private static bool IsServerOrClientCandidate(SyntaxNode node, CancellationToken cancellationToken)

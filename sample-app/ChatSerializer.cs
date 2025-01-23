@@ -1,10 +1,8 @@
-
-
 using System.Text;
 
 namespace SampleApp;
 
-public sealed class ChatSerializer : IChatServerSerializer, IChatClientSerializer
+public class ChatSerializer : IChatServerSerializer, IChatClientSerializer
 {
 	public string DeserializeSystemString(ReadOnlySpan<byte> data)
 	{

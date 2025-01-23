@@ -30,7 +30,7 @@ public partial class WebSocketRpcGenerator
 				var destination = new Memory<byte>(buffer, read, buffer.Length - read);
 				result = await client.WebSocket.ReceiveAsync(destination, cancellationToken);
 				if (result.MessageType == WebSocketMessageType.Close) return;
-				else if (result.MessageType != WebSocketMessageType.Binary) throw new InvalidDataException($""Invalid message type: {{result.MessageType}}"");
+				if (result.MessageType != WebSocketMessageType.Binary) throw new InvalidDataException($""Invalid message type: {{result.MessageType}}"");
 				read += result.Count;
 				if (result.EndOfMessage && read < (processed + {countExpression})) throw new InvalidDataException(""{tooFewBytesErrorMessage}"");
 			}}
@@ -48,8 +48,8 @@ public partial class WebSocketRpcGenerator
 		return serializerModel == null
 			? innerExpression
 			: serializerModel.Value.IsGeneric
-				? $"_serializer.Deserialize<{type}>({innerExpression})"
-				: $"_serializer.Deserialize{GetEscapedParameterType(type)}({innerExpression})";
+				? $"Deserialize<{type}>({innerExpression})"
+				: $"Deserialize{GetEscapedParameterType(type)}({innerExpression})";
 	}
 
 	private static string GenerateSerializeCall(string type, SerializerModel? serializerModel, string innerExpression)
@@ -57,7 +57,19 @@ public partial class WebSocketRpcGenerator
 		return serializerModel == null
 			? innerExpression
 			: serializerModel.Value.IsGeneric
-				? $"_serializer.Serialize<{type}>({innerExpression})"
-				: $"_serializer.Serialize{GetEscapedParameterType(type)}({innerExpression})";
+				? $"Serialize<{type}>({innerExpression})"
+				: $"Serialize{GetEscapedParameterType(type)}({innerExpression})";
+	}
+
+	private static string GenerateParameterList(IEnumerable<ParameterModel> parameters, bool types = true)
+	{
+		return types
+			? string.Join(", ", parameters.Select(param => $"{param.Type} {param.Name}"))
+			: string.Join(", ", parameters.Select(param => param.Name));
+	}
+
+	private static string GenerateArgumentMatcherList(IEnumerable<ParameterModel> parameters)
+	{
+		return string.Join(", ", parameters.Select(param => $"RpcArgMatcher<{param.Type}> {param.Name}"));
 	}
 }

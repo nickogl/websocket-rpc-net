@@ -127,22 +127,22 @@ partial class {serverModel.Class.Name}
 		{{
 			return;
 		}}
-		var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+		var __cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 		if (_connectionTimeout != null)
 		{{
-			cts.CancelAfter(_connectionTimeout.Value);
+			__cts.CancelAfter(_connectionTimeout.Value);
 		}}
-		cancellationToken = cts.Token;
-		client.Disconnected = cts.Token;
+		cancellationToken = __cts.Token;
+		client.Disconnected = __cts.Token;
 
 		try
 		{{
-			int read = 0;
-			int processed = 0;
+			int __read = 0;
+			int __processed = 0;
 			while (!cancellationToken.IsCancellationRequested && client.WebSocket.State == WebSocketState.Open)
 			{{
-				ValueWebSocketReceiveResult result = default;
-				var buffer = _allocator.Rent(_messageBufferSize);
+				ValueWebSocketReceiveResult __result = default;
+				var __buffer = _allocator.Rent(_messageBufferSize);
 				try
 				{{
 					do
@@ -152,8 +152,8 @@ partial class {serverModel.Class.Name}
 						switch (methodKey)
 						{{
 							case 0:
-								if (cts == null) throw new InvalidDataException(""Did not expect a pong frame, as the server is not configured to send ping frames"");
-								cts.TryReset(); // restart timeout
+								if (__cts == null) throw new InvalidDataException(""Did not expect a pong frame, as the server is not configured to send ping frames"");
+								__cts.TryReset(); // restart timeout
 								break;
 						");
 		foreach (var method in serverModel.Class.Methods)
@@ -165,7 +165,7 @@ partial class {serverModel.Class.Name}
 							case {method.Key}:");
 			foreach (var param in method.Parameters)
 			{
-				var lengthVariable = $"{param.Name}Length";
+				var lengthVariable = $"__{param.Name}Length";
 				var deserialize = GenerateDeserializeCall(param.Type, serverModel.Serializer, innerExpression: "{0}");
 				serverClass.Append($@"{Indent(8)}{GenerateReadInt32(lengthVariable, "Incomplete parameter length", 8)}
 								if ({lengthVariable} > _maximumParameterSize) throw new InvalidDataException(""Parameter exceeds maximum length: {param.Name}"");
@@ -180,18 +180,18 @@ partial class {serverModel.Class.Name}
 							default:
 								throw new InvalidDataException($""Invalid method key: {{methodKey}}"");
 						}}
-					}} while (!result.EndOfMessage);
+					}} while (!__result.EndOfMessage);
 				}}
 				finally
 				{{
-					_allocator.Return(buffer);
+					_allocator.Return(__buffer);
 				}}
 			}}
 		}}
 		finally
 		{{
-			cts.Cancel();
-			cts.Dispose();
+			__cts.Cancel();
+			__cts.Dispose();
 		}}
 	}}
 }}");

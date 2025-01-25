@@ -17,25 +17,25 @@ public partial class WebSocketRpcGenerator
 			throw new ArgumentException("Nesting level must be greater than or equal to 1");
 		}
 
-		return @$"while (read < (processed + {countExpression}))
+		return @$"while (__read < (__processed + {countExpression}))
 			{{
-				if (read == buffer.Length)
+				if (__read == __buffer.Length)
 				{{
-					int newLength = buffer.Length * 2;
-					if (newLength > _maximumMessageSize) throw new InvalidDataException(""Message exceeds maximum size"");
-					var newBuffer = _allocator.Rent(newLength);
-					buffer.CopyTo(newBuffer.AsSpan()); _allocator.Return(buffer);
-					buffer = newBuffer;
+					int __newLength = __buffer.Length * 2;
+					if (__newLength > _maximumMessageSize) throw new InvalidDataException(""Message exceeds maximum size"");
+					var __newBuffer = _allocator.Rent(__newLength);
+					__buffer.CopyTo(__newBuffer.AsSpan()); _allocator.Return(__buffer);
+					__buffer = __newBuffer;
 				}}
-				var destination = new Memory<byte>(buffer, read, buffer.Length - read);
-				result = await client.WebSocket.ReceiveAsync(destination, cancellationToken);
-				if (result.MessageType == WebSocketMessageType.Close) return;
-				if (result.MessageType != WebSocketMessageType.Binary) throw new InvalidDataException($""Invalid message type: {{result.MessageType}}"");
-				read += result.Count;
-				if (result.EndOfMessage && read < (processed + {countExpression})) throw new InvalidDataException(""{tooFewBytesErrorMessage}"");
+				var __destination = new Memory<byte>(__buffer, __read, __buffer.Length - __read);
+				__result = await client.WebSocket.ReceiveAsync(__destination, cancellationToken);
+				if (__result.MessageType == WebSocketMessageType.Close) return;
+				if (__result.MessageType != WebSocketMessageType.Binary) throw new InvalidDataException($""Invalid message type: {{__result.MessageType}}"");
+				__read += __result.Count;
+				if (__result.EndOfMessage && __read < (__processed + {countExpression})) throw new InvalidDataException(""{tooFewBytesErrorMessage}"");
 			}}
-			{string.Format(assignmentFormat, $"buffer.AsSpan(processed, {countExpression})")};
-			processed += {countExpression};".Replace("\n\t\t\t", $"\n{Indent(nestingLevel)}");
+			{string.Format(assignmentFormat, $"__buffer.AsSpan(__processed, {countExpression})")};
+			__processed += {countExpression};".Replace("\n\t\t\t", $"\n{Indent(nestingLevel)}");
 	}
 
 	private static string GenerateReadInt32(string intoVariable, string tooFewBytesErrorMessage, int nestingLevel)

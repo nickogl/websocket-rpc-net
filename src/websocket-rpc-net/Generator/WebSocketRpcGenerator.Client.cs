@@ -358,25 +358,25 @@ partial class {clientModel.Class.Name} : IDisposable
 			clientClass.AppendLine(@$"
 		public void {method.Name}(IEnumerable<{clientModel.Class.Name}> clients, {GenerateParameterList(method.Parameters)})
 		{{
-			var firstClient = clients.FirstOrDefault();
-			if (firstClient == null)
+			var __firstClient = clients.FirstOrDefault();
+			if (__firstClient == null)
 			{{
 				return;
 			}}");
 			foreach (var param in method.Parameters)
 			{
 				clientClass.Append(@$"
-			var {param.Name}Data = firstClient._serializer.{GenerateSerializeCall(param.Type, clientModel.Serializer, param.Name)};");
+			var __{param.Name}Data = __firstClient._serializer.{GenerateSerializeCall(param.Type, clientModel.Serializer, param.Name)};");
 			}
 			clientClass.AppendLine(@$"
-			foreach (var client in clients)
+			foreach (var __client in clients)
 			{{
-				EnsureClient(client);
+				EnsureClient(__client);
 
-				client.__BufferWriteMethodKey({method.Key});");
+				__client.__BufferWriteMethodKey({method.Key});");
 			foreach (var param in method.Parameters)
 			{
-				clientClass.AppendLine($"\t\t\t\tclient.__BufferWriteParameter({param.Name}Data);");
+				clientClass.AppendLine($"\t\t\t\t__client.__BufferWriteParameter(__{param.Name}Data);");
 			}
 			clientClass.Append(@$"
 			}}

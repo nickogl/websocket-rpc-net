@@ -10,5 +10,8 @@
   },
   "omnisharp.organizeImportsOnFormat": true,
   "dotnet.completion.showCompletionItemsFromUnimportedNamespaces": true,
-  "dotnet.defaultSolution": "websocket-rpc-net.sln"
+  "dotnet.defaultSolution": "websocket-rpc-net.sln",
+  "dotnet.unitTestDebuggingOptions": {
+    "justMyCode": false,
+  }
 }

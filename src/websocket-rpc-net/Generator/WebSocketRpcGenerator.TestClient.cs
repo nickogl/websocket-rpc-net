@@ -100,19 +100,45 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.WebSockets;
 using System.Text;
+using System.Threading;
 
 namespace {testClientModel.ClassNamespace};
 
-public partial class {testClientModel.ClassName} : IDisposable, IAsyncDisposable
+public partial class {testClientModel.ClassName} : IAsyncDisposable
 {{
+	private object _syncRoot = new();
 	private ClientWebSocket? _webSocket;
+	private string _lastError = ""Not connected yet"";
 	private CancellationTokenSource? _cts;
 	private Task? _processMessagesTask;
+	private Task? _pingTask;
 	private __Receiver? _receiver;
-	private TimeSpan _defaultReceiveTimeout = TimeSpan.FromSeconds(5);
+	private TaskCompletionSource _connected = new();
+	private TaskCompletionSource _disconnected = new();
+
+	/// <summary>Maximum time to wait for a call to be received.</summary>
+	private TimeSpan _receiveTimeout = TimeSpan.FromSeconds(5);
+
+	/// <summary>Interval in which to send ping messages to the server.</summary>
+	/// <remarks>
+	/// Setting this to null disables sending ping messages. This causes the client
+	/// to be disconnected if the server requires these messages. Best to set this
+	/// to a lower value than the client timeout of the server.
+	/// </remarks>
+	private TimeSpan? _pingInterval = null;
+
+	/// <summary>Time provider to use when periodically sending pings.</summary>
+	private TimeProvider? _timeProvider = null;
 
 	/// <summary>
-	/// Wait until the server sent calls matching your provided arguments.
+	/// Configure a websocket before connecting to it.
+	/// </summary>
+	/// <remarks>You may add authentication headers or cookies here.</remarks>
+	/// <param name=""webSocket"">Websocket to configure.</param>
+	partial void ConfigureWebSocket(WebSocket webSocket);
+
+	/// <summary>
+	/// Wait until the server sent a call matching your provided arguments.
 	/// This allows tests to not only verify that clients received certain calls,
 	/// but also makes them more resilient because they do not rely on time. It
 	/// does not matter if the call already happened or is about to happen.
@@ -125,7 +151,7 @@ public partial class {testClientModel.ClassName} : IDisposable, IAsyncDisposable
 	/// <item>Allow the argument to be anything using <see cref=""RpcArg.Any{{T}}""/></item>
 	/// </list>
 	/// </remarks>
-	public __Receiver Receives
+	public __Receiver Received
 	{{
 		get {{ Debug.Assert(_receiver != null); return _receiver; }}
 	}}
@@ -136,8 +162,14 @@ public partial class {testClientModel.ClassName} : IDisposable, IAsyncDisposable
 		get {{ Debug.Assert(_receiver != null); return _receiver.__ReceivedCalls; }}
 	}}
 
+	/// <summary>A task that completes once the client has connected to the server.</summary>
+	public Task Connected => _connected.Task.WaitAsync(_receiveTimeout);
+
+	/// <summary>A task that completes once the client has disconnected from the server.</summary>
+	public Task Disconnected => _disconnected.Task.WaitAsync(_receiveTimeout);
+
 	/// <summary>
-	/// Asynchronously connect to a <see cref=""{testClientModel.ServerClass.Namespace}.{testClientModel.ServerClass.Name}"" /> instance located at <paramref name=""uri""/>.
+	/// Connect to a <see cref=""{testClientModel.ServerClass.Namespace}.{testClientModel.ServerClass.Name}"" /> instance located at <paramref name=""uri""/>.
 	/// </summary>
 	/// <param name=""uri"">URI of the server to connect to.</param>
 	public async Task ConnectAsync(Uri uri, CancellationToken cancellationToken = default)
@@ -147,57 +179,74 @@ public partial class {testClientModel.ClassName} : IDisposable, IAsyncDisposable
 			uri = new Uri(uri.ToString().Replace(""http://"", ""ws://"").Replace(""https://"", ""wss://""));
 		}}
 
-		_webSocket = new ClientWebSocket();
+		lock (_syncRoot)
+		{{
+			if (_webSocket != null)
+			{{
+				throw new InvalidOperationException(""Already connected"");
+			}}
+			_webSocket = new ClientWebSocket();
+			ConfigureWebSocket(_webSocket);
+		}}
 		await _webSocket.ConnectAsync(uri, cancellationToken);
 
+		_disconnected = new TaskCompletionSource();
 		_cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 		_receiver = new __Receiver(this);
 		_processMessagesTask = ProcessMessages(_webSocket, _receiver, _cts.Token);
+		if (_pingInterval != null)
+		{{
+			_pingTask = PingPeriodically(_webSocket, _pingInterval.Value, _cts.Token);
+		}}
+		try
+		{{
+			await Connected;
+		}}
+		catch (TimeoutException e)
+		{{
+			throw new TimeoutException($""Client never entered the message processing loop on the server. Last recorded error: {{_lastError}}"", e);
+		}}
 	}}
 
 	/// <summary>
-	/// Synchronously connect to a <see cref=""{testClientModel.ServerClass.Namespace}.{testClientModel.ServerClass.Name}"" /> instance located at <paramref name=""uri""/>.
-	/// </summary>
-	/// <param name=""uri"">URI of the server to connect to.</param>
-	public void Connect(Uri uri, CancellationToken cancellationToken = default)
-	{{
-		ConnectAsync(uri, cancellationToken).Wait(cancellationToken);
-	}}
-
-	/// <summary>
-	/// Asynchronously disconnect from the server currently connected to.
+	/// Disconnect from the server currently connected to.
 	/// </summary>
 	public async Task DisconnectAsync(CancellationToken cancellationToken = default)
 	{{
-		try
+		var closeTask = Task.CompletedTask;
+		lock (_syncRoot)
 		{{
-			_cts?.Cancel();
 			if (_webSocket != null)
 			{{
-				await _webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, null, cancellationToken);
+				closeTask = _webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, null, cancellationToken);
 			}}
-			if (_processMessagesTask != null)
-			{{
-				await _processMessagesTask;
-			}}
-			_webSocket?.Dispose();
+		}}
+		try
+		{{
+			await closeTask;
 		}}
 		catch (Exception)
 		{{
 		}}
 
-		_processMessagesTask = null;
-		_receiver = null;
-		_cts = null;
-		_webSocket = null;
-	}}
+		if (_cts != null)
+		{{
+			_cts.Cancel();
+			_cts.Dispose();
+			_cts = null;
+		}}
 
-	/// <summary>
-	/// Synchronously disconnect from the server currently connected to.
-	/// </summary>
-	public void Disconnect(CancellationToken cancellationToken = default)
-	{{
-		DisconnectAsync(cancellationToken).Wait(cancellationToken);
+		if (_pingTask != null)
+		{{
+			try {{ await _pingTask; }} catch (Exception) {{ }} finally {{ _pingTask = null; }}
+		}}
+
+		if (_processMessagesTask != null)
+		{{
+			try {{ await _processMessagesTask; }} catch {{ }} finally {{ _processMessagesTask = null; }}
+		}}
+
+		_receiver = null;
 	}}
 
 	public virtual async ValueTask DisposeAsync()
@@ -205,12 +254,14 @@ public partial class {testClientModel.ClassName} : IDisposable, IAsyncDisposable
 		await DisconnectAsync();
 	}}
 
-	public virtual void Dispose()
+	private async Task PingPeriodically(WebSocket webSocket, TimeSpan interval, CancellationToken cancellationToken)
 	{{
-		var result = DisposeAsync();
-		if (!result.IsCompleted)
+		var timeProvider = _timeProvider ?? TimeProvider.System;
+		var pingMessage = new byte[4] {{ 0, 0, 0, 0 }};
+		while (!cancellationToken.IsCancellationRequested && webSocket.State == WebSocketState.Open)
 		{{
-			result.AsTask().Wait();
+			await webSocket.SendAsync(pingMessage.AsMemory(), WebSocketMessageType.Binary, true, cancellationToken);
+			await Task.Delay(interval, timeProvider);
 		}}
 	}}
 ");
@@ -231,65 +282,90 @@ public partial class {testClientModel.ClassName} : IDisposable, IAsyncDisposable
 
 		// RPC receive implementation
 		testClientClass.Append(@$"
-	private async Task ProcessMessages(WebSocket webSocket, __Receiver receiver, CancellationToken cancellationToken)
+	private async Task ProcessMessages(WebSocket __webSocket, __Receiver __receiver, CancellationToken cancellationToken)
 	{{
-		while (!cancellationToken.IsCancellationRequested && webSocket.State == WebSocketState.Open)
+		try
 		{{
-			ValueWebSocketReceiveResult result = default;
-			var buffer = new byte[8192];
-			var __messageLength = 0;
-			do
+			while (__webSocket.State == WebSocketState.Open)
 			{{
-				result = await webSocket.ReceiveAsync(buffer.AsMemory(__messageLength), cancellationToken);
-				if (result.MessageType == WebSocketMessageType.Close)
+				ValueWebSocketReceiveResult __result = default;
+				var __buffer = new byte[8192];
+				var __messageLength = 0;
+				do
 				{{
-					return;
-				}}
-				if (result.MessageType != WebSocketMessageType.Binary)
-				{{
-					throw new InvalidDataException($""Invalid message type: {{result.MessageType}}"");
-				}}
+					__result = await __webSocket.ReceiveAsync(__buffer.AsMemory(__messageLength), cancellationToken);
+					if (__result.MessageType == WebSocketMessageType.Close)
+					{{
+						await __webSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+						return;
+					}}
+					if (__result.MessageType != WebSocketMessageType.Binary)
+					{{
+						throw new InvalidDataException($""Invalid message type: {{__result.MessageType}}"");
+					}}
 
-				__messageLength += result.Count;
-				if (__messageLength == buffer.Length)
-				{{
-					var newBuffer = new byte[buffer.Length * 2];
-					buffer.CopyTo(newBuffer, 0);
-					buffer = newBuffer;
-				}}
-			}} while (!result.EndOfMessage);
+					__messageLength += __result.Count;
+					if (__messageLength == __buffer.Length)
+					{{
+						var newBuffer = new byte[__buffer.Length * 2];
+						__buffer.CopyTo(newBuffer, 0);
+						__buffer = newBuffer;
+					}}
+				}} while (!__result.EndOfMessage);
 
-			var offset = 0;
-			while (offset < __messageLength)
-			{{
-				int methodKey = BinaryPrimitives.ReadInt32LittleEndian(buffer.AsSpan(offset, sizeof(int)));
-				offset += sizeof(int);
-				switch (methodKey)
-				{{");
+				var __offset = 0;
+				while (__offset < __messageLength)
+				{{
+					int methodKey = BinaryPrimitives.ReadInt32LittleEndian(__buffer.AsSpan(__offset, sizeof(int)));
+					__offset += sizeof(int);
+					switch (methodKey)
+					{{
+						// Initial ping message sent as soon as client entered the processing loop
+						case 0:
+							_connected.TrySetResult();
+							break;");
 		foreach (var method in testClientModel.ClientClass.Methods)
 		{
 			var paramsList = GenerateParameterList(method.Parameters, types: false);
 			testClientClass.Append(@$"
-					case {method.Key}:");
+						case {method.Key}:");
 			foreach (var param in method.Parameters)
 			{
 				testClientClass.Append(@$"
-						var {param.Name}Length = BinaryPrimitives.ReadInt32LittleEndian(buffer.AsSpan(offset, sizeof(int)));
-						offset += sizeof(int);
-						var {param.Name} = _clientSerializer.{GenerateDeserializeCall(param.Type, testClientModel.ClientSerializer, $"buffer.AsSpan(offset, {param.Name}Length)")};
-						offset += {param.Name}Length;");
+							var __{param.Name}Length__ = BinaryPrimitives.ReadInt32LittleEndian(__buffer.AsSpan(__offset, sizeof(int)));
+							__offset += sizeof(int);
+							var {param.Name} = _clientSerializer.{GenerateDeserializeCall(param.Type, testClientModel.ClientSerializer, $"__buffer.AsSpan(__offset, __{param.Name}Length__)")};
+							__offset += __{param.Name}Length__;");
 			}
 			testClientClass.Append(@$"
-						On{method.Name}({paramsList});
-						receiver.__ReceivedCalls.{method.Name}.__AddCall(new({paramsList}));
-						break;
+							On{method.Name}({paramsList});
+							__receiver.__ReceivedCalls.{method.Name}.__AddCall(new({paramsList}));
+							break;
 			");
 		}
 		testClientClass.AppendLine(@$"
-					default:
-						throw new InvalidDataException($""Method with key '{{methodKey}}' does not exist"");
+						default:
+							throw new InvalidDataException($""Method with key '{{methodKey}}' does not exist"");
+					}}
 				}}
 			}}
+		}}
+		catch (Exception e)
+		{{
+			_lastError = $""ProcessMessages() terminated with error: {{e}}"";
+		}}
+		finally
+		{{
+			lock (_syncRoot)
+			{{
+				if (_webSocket != null)
+				{{
+					_webSocket.Dispose();
+					_webSocket = null;
+				}}
+			}}
+			_connected = new TaskCompletionSource();
+			_disconnected.TrySetResult();
 		}}
 	}}");
 
@@ -301,20 +377,20 @@ public partial class {testClientModel.ClassName} : IDisposable, IAsyncDisposable
 			testClientClass.AppendLine(@$"
 	public async ValueTask {method.Name}({GenerateParameterList(method.Parameters)})
 	{{
-		Debug.Assert(_webSocket != null);
-		Debug.Assert(_cts != null);
+		Debug.Assert(_webSocket != null, _lastError);
+		Debug.Assert(_cts != null, _lastError);
 
-		var i32Buffer = new byte[4];
-		BinaryPrimitives.WriteInt32LittleEndian(i32Buffer, {method.Key});
-		await _webSocket.SendAsync(i32Buffer, WebSocketMessageType.Binary, false, _cts.Token);");
+		var __i32Buffer = new byte[4];
+		BinaryPrimitives.WriteInt32LittleEndian(__i32Buffer, {method.Key});
+		await _webSocket.SendAsync(__i32Buffer, WebSocketMessageType.Binary, false, _cts.Token);");
 			for (int i = 0; i < method.Parameters.Length; i++)
 			{
 				var endOfMessage = i == (method.Parameters.Length - 1) ? "true" : "false";
 				testClientClass.AppendLine(@$"
-		var data = _serverSerializer.{GenerateSerializeCall(method.Parameters[i].Type, testClientModel.ServerSerializer, method.Parameters[i].Name)}.ToArray();
-		BinaryPrimitives.WriteInt32LittleEndian(i32Buffer, data.Length);
-		await _webSocket.SendAsync(i32Buffer, WebSocketMessageType.Binary, false, _cts.Token);
-		await _webSocket.SendAsync(data.AsMemory(), WebSocketMessageType.Binary, {endOfMessage}, _cts.Token);");
+		var __data = _serverSerializer.{GenerateSerializeCall(method.Parameters[i].Type, testClientModel.ServerSerializer, method.Parameters[i].Name)}.ToArray();
+		BinaryPrimitives.WriteInt32LittleEndian(__i32Buffer, __data.Length);
+		await _webSocket.SendAsync(__i32Buffer, WebSocketMessageType.Binary, false, _cts.Token);
+		await _webSocket.SendAsync(__data.AsMemory(), WebSocketMessageType.Binary, {endOfMessage}, _cts.Token);");
 			}
 			testClientClass.AppendLine(@$"
 	}}");
@@ -435,17 +511,17 @@ public partial class {testClientModel.ClassName} : IDisposable, IAsyncDisposable
 			testClientClass.AppendLine(@$"
 		public async Task {method.Name}({GenerateArgumentMatcherList(method.Parameters)})
 		{{
-			var waiter = new TaskCompletionSource();
-			var interceptor = new __Registries.{method.Name}Interceptor(waiter, {GenerateParameterList(method.Parameters, types: false)});
-			__ReceivedCalls.{method.Name}.__AddInterceptor(interceptor);
+			var __waiter = new TaskCompletionSource();
+			var __interceptor = new __Registries.{method.Name}Interceptor(__waiter, {GenerateParameterList(method.Parameters, types: false)});
+			__ReceivedCalls.{method.Name}.__AddInterceptor(__interceptor);
 			try
 			{{
 				// Wait a maximum amount of time to avoid tests running infinitely
-				await waiter.Task.WaitAsync(_client._defaultReceiveTimeout, _client._cts?.Token ?? default);
+				await __waiter.Task.WaitAsync(_client._receiveTimeout, _client._cts?.Token ?? default);
 			}}
 			catch (TimeoutException e)
 			{{
-				throw new TimeoutException($""Did not receive a call to '{method.Name}' matching the provided args within {{_client._defaultReceiveTimeout.TotalSeconds:n1}} seconds"", e);
+				throw new TimeoutException($""Did not receive a call to '{method.Name}' matching the provided args within {{_client._receiveTimeout.TotalSeconds:n1}} seconds"", e);
 			}}
 		}}");
 		}
@@ -462,10 +538,10 @@ public static class {testClientModel.ClassName}Extensions
 		foreach (var method in testClientModel.ClientClass.Methods)
 		{
 			testClientClass.AppendLine(@$"
-	public static IEnumerable<{testClientModel.ClassName}.__Registries.{method.Name}Call> Filter(this {testClientModel.ClassName}.__Registries.Registry<{testClientModel.ClassName}.__Registries.{method.Name}Call, {testClientModel.ClassName}.__Registries.{method.Name}Interceptor> registry, {GenerateArgumentMatcherList(method.Parameters)})
+	public static IEnumerable<{testClientModel.ClassName}.__Registries.{method.Name}Call> Filter(this {testClientModel.ClassName}.__Registries.Registry<{testClientModel.ClassName}.__Registries.{method.Name}Call, {testClientModel.ClassName}.__Registries.{method.Name}Interceptor> __registry, {GenerateArgumentMatcherList(method.Parameters)})
 	{{
-		var interceptor = new {testClientModel.ClassName}.__Registries.{method.Name}Interceptor(null!, {GenerateParameterList(method.Parameters, types: false)});
-		return registry.Where(interceptor.Matches);
+		var __interceptor = new {testClientModel.ClassName}.__Registries.{method.Name}Interceptor(null!, {GenerateParameterList(method.Parameters, types: false)});
+		return __registry.Where(__interceptor.Matches);
 	}}");
 		}
 		testClientClass.Append("}");

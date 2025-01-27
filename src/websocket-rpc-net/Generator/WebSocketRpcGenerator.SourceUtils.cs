@@ -28,8 +28,8 @@ public partial class WebSocketRpcGenerator
 					__buffer = __newBuffer;
 				}}
 				var __destination = new Memory<byte>(__buffer, __read, __buffer.Length - __read);
-				__result = await client.WebSocket.ReceiveAsync(__destination, cancellationToken);
-				if (__result.MessageType == WebSocketMessageType.Close) return;
+				__result = await client.WebSocket.ReceiveAsync(__destination, __receiveCts.Token);
+				if (__result.MessageType == WebSocketMessageType.Close) {{ try {{ await client.WebSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None); }} catch {{ }} return; }}
 				if (__result.MessageType != WebSocketMessageType.Binary) throw new InvalidDataException($""Invalid message type: {{__result.MessageType}}"");
 				__read += __result.Count;
 				if (__result.EndOfMessage && __read < (__processed + {countExpression})) throw new InvalidDataException(""{tooFewBytesErrorMessage}"");

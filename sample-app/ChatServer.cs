@@ -5,18 +5,67 @@ namespace SampleApp;
 [WebSocketRpcServer<ChatClient>(WebSocketRpcSerializationMode.Specialized)]
 public sealed partial class ChatServer
 {
-	public ChatServer(IChatServerSerializer serializer)
+	private readonly List<string> _messages = [];
+	private readonly List<ChatClient> _clients = [];
+
+	public IReadOnlyCollection<string> Messages => _messages;
+
+	public ChatServer(IChatServerSerializer serializer, TimeProvider timeProvider, ILogger<ChatServer> logger)
 	{
 		_serializer = serializer;
+		_clientTimeout = TimeSpan.FromSeconds(5);
+		_timeProvider = timeProvider;
 	}
 
 	public void Dispose()
 	{
 	}
 
-	[WebSocketRpcMethod(1)]
-	public ValueTask PostMessage(ChatClient client, string message)
+	private partial async ValueTask OnConnectedAsync(ChatClient client)
 	{
+		List<string> messageSnapshot;
+		lock (_clients)
+		{
+			_clients.Add(client);
+			messageSnapshot = [.. _messages];
+		}
+
+		using var batch = new ChatClient.Batch(client);
+		foreach (var message in messageSnapshot)
+		{
+			batch.PostMessage(message);
+		}
+		await batch.Flush();
+	}
+
+	private partial ValueTask OnDisconnectedAsync(ChatClient client)
+	{
+		lock (_clients)
+		{
+			_clients.Remove(client);
+		}
+
 		return ValueTask.CompletedTask;
+	}
+
+	[WebSocketRpcMethod(1)]
+	public async ValueTask PostMessage(ChatClient client, string message)
+	{
+		List<ChatClient> targets;
+		lock (_clients)
+		{
+			targets = [.. _clients];
+			_messages.Add(message);
+		}
+
+		using var broadcast = new ChatClient.Broadcast();
+		broadcast.PostMessage(targets, message);
+		try
+		{
+			await broadcast.Flush();
+		}
+		catch (Exception)
+		{
+		}
 	}
 }

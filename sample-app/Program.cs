@@ -1,12 +1,8 @@
 using SampleApp;
-using System.Net.WebSockets;
-using System.Runtime.CompilerServices;
-
-// Integration tests cannot both reference the generator project as a library and analyzer, so we expose the marker attributes
-[assembly: InternalsVisibleTo("integration-test")]
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services
+	.AddSingleton(TimeProvider.System)
 	.AddSingleton<ChatSerializer>()
 	.AddSingleton<IChatServerSerializer>(services => services.GetRequiredService<ChatSerializer>())
 	.AddSingleton<IChatClientSerializer>(services => services.GetRequiredService<ChatSerializer>())
@@ -26,8 +22,6 @@ app.Use(async (context, next) =>
 
 		var server = app.Services.GetRequiredService<ChatServer>();
 		await server.ProcessAsync(client, context.RequestAborted);
-
-		await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, null, context.RequestAborted);
 	}
 	else
 	{

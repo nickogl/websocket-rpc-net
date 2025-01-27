@@ -74,9 +74,12 @@ public partial class WebSocketRpcGenerator
 		}
 
 		var serverClass = new StringBuilder(@$"
+#nullable enable
+
 using System;
 using System.Buffers;
 using System.Buffers.Binary;
+using System.Diagnostics;
 using System.Net.WebSockets;
 using System.Threading;
 
@@ -84,9 +87,12 @@ namespace {serverModel.Class.Namespace};
 
 partial class {serverModel.Class.Name}
 {{
-	/// <summary>Time after which clients are disconnected if they fail to acknowledge ping frames.</summary>
+	/// <summary>Time after which clients are disconnected if they fail to send ping frames.</summary>
 	/// <remarks>Setting this to null (default) disables quick detection of disconnects.</remarks>
-	private TimeSpan? _connectionTimeout = null;
+	private TimeSpan? _clientTimeout = null;
+
+	/// <summary>Time provider to use for enforcing <see cref=""_clientTimeout"" />.</summary>
+	private TimeProvider? _timeProvider = null;
 
 	/// <summary>Array pool to use for allocating buffers.</summary>
 	private ArrayPool<byte> _allocator = ArrayPool<byte>.Shared;
@@ -121,77 +127,143 @@ partial class {serverModel.Class.Name}
 	private {GetFullyQualifiedType(serverModel.Serializer.Value.InterfaceNamespace, serverModel.Serializer.Value.InterfaceName)} _serializer;");
 		}
 		serverClass.Append(@$"
+	/// <summary>
+	/// Called when the client is about to enter the message processing loop.
+	/// </summary>
+	private partial ValueTask OnConnectedAsync({GetFullyQualifiedType(serverModel.ClientClassNamespace, serverModel.ClientClassName)} client);
+
+	/// <summary>
+	/// Called when the client has disconnected from the server. Its websocket is unusable at this point.
+	/// </summary>
+	private partial ValueTask OnDisconnectedAsync({GetFullyQualifiedType(serverModel.ClientClassNamespace, serverModel.ClientClassName)} client);
+
+	private async ValueTask SendPingAsync(WebSocket webSocket, CancellationToken cancellationToken)
+	{{
+		var message = new byte[] {{ 0, 0, 0, 0 }};
+		await webSocket.SendAsync(message, WebSocketMessageType.Binary, true, cancellationToken);
+	}}
+
+	private sealed record CloseActionState({GetFullyQualifiedType(serverModel.ClientClassNamespace, serverModel.ClientClassName)} Client, CancellationTokenSource Cts)
+	{{
+	}}
+
+	/// <summary>
+	/// Process a client's websocket messages until it disconnects or the provided <paramref name=""cancellationToken""/> is cancelled.
+	/// </summary>
+	/// <param name=""client"">Client whose websocket messages to process.</param>
+	/// <param name=""cancellationToken"">Cancellation token to stop processing messages.</param>
+	/// <exception cref=""OperationCanceledException"">The <paramref name=""cancellationToken"" /> was triggered or the client timed out.</exception>
+	/// <exception cref=""WebSocketException"">An operation on the client's websocket failed.</exception>
+	/// <exception cref=""InvalidDataException"">The client sent an invalid message.</exception>
+	/// <returns>A task that represents the lifecycle of the provided client.</returns>
 	public async Task ProcessAsync({GetFullyQualifiedType(serverModel.ClientClassNamespace, serverModel.ClientClassName)} client, CancellationToken cancellationToken)
 	{{
 		if (cancellationToken.IsCancellationRequested)
 		{{
 			return;
 		}}
-		var __cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-		if (_connectionTimeout != null)
+
+		// Cancelling the token passed to WebSocket.Send/ReceiveAsync closes the underlying socket,
+		// making it impossible to perform the close handshake. So instead of directly passing
+		// the cancellation token, we cancel a separate one after performing the close handshake.
+		static void CloseWebSocket(object? state)
 		{{
-			__cts.CancelAfter(_connectionTimeout.Value);
+			Debug.Assert(state is CloseActionState);
+			((CloseActionState)state).Client.WebSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None)
+				.ContinueWith(static (_, state) =>
+				{{
+					Debug.Assert(state is CloseActionState);
+					((CloseActionState)state).Cts.Cancel(throwOnFirstException: false);
+				}}, state);
 		}}
-		cancellationToken = __cts.Token;
-		client.Disconnected = __cts.Token;
+
+		var __receiveCts = new CancellationTokenSource();
+		var __closeActionState = new CloseActionState(client, __receiveCts);
+		var __ctReg = cancellationToken.UnsafeRegister(CloseWebSocket, __closeActionState);
+		client.Disconnected = __receiveCts.Token;
+		ITimer? __clientTimeoutTimer = null;
+		if (_clientTimeout != null)
+		{{
+			__clientTimeoutTimer = (_timeProvider ?? TimeProvider.System)
+				.CreateTimer(CloseWebSocket, __closeActionState, _clientTimeout.Value, Timeout.InfiniteTimeSpan);
+		}}
 
 		try
 		{{
-			int __read = 0;
-			int __processed = 0;
-			while (!cancellationToken.IsCancellationRequested && client.WebSocket.State == WebSocketState.Open)
-			{{
-				ValueWebSocketReceiveResult __result = default;
-				var __buffer = _allocator.Rent(_messageBufferSize);
-				try
-				{{
-					do
-					{{
-						{GenerateReadInt32("methodKey", "Incomplete method key", 6)}
+			// Send initial ping message, this allows the client to know when it entered the message processing loop
+			await SendPingAsync(client.WebSocket, cancellationToken);
 
-						switch (methodKey)
+			await OnConnectedAsync(client);
+			try
+			{{
+				int __read = 0;
+				int __processed = 0;
+				while (client.WebSocket.State == WebSocketState.Open)
+				{{
+					ValueWebSocketReceiveResult __result = default;
+					var __buffer = _allocator.Rent(_messageBufferSize);
+					try
+					{{
+						do
 						{{
-							case 0:
-								if (__cts == null) throw new InvalidDataException(""Did not expect a pong frame, as the server is not configured to send ping frames"");
-								__cts.TryReset(); // restart timeout
-								break;
+							{GenerateReadInt32("methodKey", "Incomplete method key", 6)}
+
+							switch (methodKey)
+							{{
+								case 0:
+									if (__clientTimeoutTimer == null || _clientTimeout == null)
+									{{
+										throw new InvalidDataException(""Unexpected ping frame; the server is not configured to time out clients"");
+									}}
+									__clientTimeoutTimer.Change(_clientTimeout.Value, Timeout.InfiniteTimeSpan);
+									break;
 						");
 		foreach (var method in serverModel.Class.Methods)
 		{
 			serverClass.AppendLine(@$"
-							//
-							// {method.Name}({GenerateParameterList(method.Parameters, types: false)})
-							//
-							case {method.Key}:");
+								//
+								// {method.Name}({GenerateParameterList(method.Parameters, types: false)})
+								//
+								case {method.Key}:");
 			foreach (var param in method.Parameters)
 			{
-				var lengthVariable = $"__{param.Name}Length";
+				var lengthVariable = $"__{param.Name}Length__";
 				var deserialize = GenerateDeserializeCall(param.Type, serverModel.Serializer, innerExpression: "{0}");
-				serverClass.Append($@"{Indent(8)}{GenerateReadInt32(lengthVariable, "Incomplete parameter length", 8)}
-								if ({lengthVariable} > _maximumParameterSize) throw new InvalidDataException(""Parameter exceeds maximum length: {param.Name}"");
-								{GenerateReadExactly(lengthVariable, $"var {param.Name} = _serializer.{deserialize}", "Incomplete parameter data", 8)}");
+				serverClass.Append($@"{Indent(9)}{GenerateReadInt32(lengthVariable, "Incomplete parameter length", 9)}
+									if ({lengthVariable} > _maximumParameterSize) throw new InvalidDataException(""Parameter exceeds maximum length: {param.Name}"");
+									{GenerateReadExactly(lengthVariable, $"var {param.Name} = _serializer.{deserialize}", "Incomplete parameter data", 9)}");
 			}
 			serverClass.AppendLine(@$"
-								await {method.Name}(client, {GenerateParameterList(method.Parameters, types: false)});
-								break;");
+									await {method.Name}(client, {GenerateParameterList(method.Parameters, types: false)});
+									break;");
 		}
 
 		serverClass.AppendLine(@$"
-							default:
-								throw new InvalidDataException($""Invalid method key: {{methodKey}}"");
-						}}
-					}} while (!__result.EndOfMessage);
+								default:
+									throw new InvalidDataException($""Invalid method key: {{methodKey}}"");
+							}}
+						}} while (!__result.EndOfMessage);
+					}}
+					finally
+					{{
+						_allocator.Return(__buffer);
+					}}
 				}}
-				finally
-				{{
-					_allocator.Return(__buffer);
-				}}
+			}}
+			finally
+			{{
+				// Cancel outstanding writes
+				__receiveCts.Cancel();
+
+				client.WebSocket = null!;
+				await OnDisconnectedAsync(client);
 			}}
 		}}
 		finally
 		{{
-			__cts.Cancel();
-			__cts.Dispose();
+			__clientTimeoutTimer?.Dispose();
+			__ctReg.Dispose();
+			__receiveCts.Dispose();
 		}}
 	}}
 }}");

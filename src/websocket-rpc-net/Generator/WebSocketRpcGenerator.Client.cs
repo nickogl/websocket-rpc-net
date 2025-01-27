@@ -168,12 +168,12 @@ partial class {clientModel.Class.Name} : IDisposable
 	{{
 		Debug.Assert(_buffer != null);
 
-		var fullParamSize = sizeof(int) + data.Length;
-		__BufferEnsureAtLeast(fullParamSize);
+		__BufferEnsureAtLeast(sizeof(int) + data.Length);
 
 		BinaryPrimitives.WriteInt32LittleEndian(_buffer.AsSpan(_bufferOffset, sizeof(int)), data.Length);
-		data.CopyTo(_buffer.AsSpan(_bufferOffset, fullParamSize));
-		_bufferOffset += fullParamSize;
+		_bufferOffset += sizeof(int);
+		data.CopyTo(_buffer.AsSpan(_bufferOffset, data.Length));
+		_bufferOffset += data.Length;
 	}}
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -212,6 +212,11 @@ partial class {clientModel.Class.Name} : IDisposable
 		foreach (var method in clientModel.Class.Methods)
 		{
 			clientClass.AppendLine(@$"
+	/// <summary>
+	/// Call the '{method.Name}' procedure on the client.
+	/// </summary>
+	/// <exception cref=""OperationCanceledException"">Client disconnected or timed out during this operation.</exception>
+	/// <exception cref=""WebSocketException"">Operation on the client's websocket failed.</exception>
 	public partial async ValueTask {method.Name}({GenerateParameterList(method.Parameters)})
 	{{
 		__BufferCreate(_messageBufferSize);
@@ -253,14 +258,20 @@ partial class {clientModel.Class.Name} : IDisposable
 
 		public void Dispose()
 		{{
+			Debug.Assert(_client != null, ""Must not use default constructor"");
+
 			_client.__BufferDestroy();
 		}}
 
 		/// <summary>
 		/// Send the accumulated data to the client.
 		/// </summary>
+		/// <exception cref=""OperationCanceledException"">Client disconnected or timed out during this operation.</exception>
+		/// <exception cref=""WebSocketException"">Operation on the client's websocket failed.</exception>
 		public ValueTask Flush()
 		{{
+			Debug.Assert(_client != null, ""Must not use default constructor"");
+
 			return _client.WebSocket.SendAsync(_client.__BufferGetView(), WebSocketMessageType.Binary, true, _client.Disconnected);
 		}}");
 		foreach (var method in clientModel.Class.Methods)
@@ -268,6 +279,8 @@ partial class {clientModel.Class.Name} : IDisposable
 			clientClass.AppendLine(@$"
 		public void {method.Name}({GenerateParameterList(method.Parameters)})
 		{{
+			Debug.Assert(_client != null, ""Must not use default constructor"");
+
 			_client.__BufferWriteMethodKey({method.Key});");
 			foreach (var param in method.Parameters)
 			{

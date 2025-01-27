@@ -6,12 +6,14 @@ namespace SampleApp;
 [WebSocketRpcTestClient<ChatServer>]
 public partial class ChatTestClient
 {
-	public ChatTestClient(Uri uri, CancellationToken cancellationToken = default)
+	public ChatTestClient(Uri uri, TimeProvider? timeProvider = default, CancellationToken cancellationToken = default)
 	{
 		var serializer = new ChatTestClientSerializer();
 		_serverSerializer = serializer;
 		_clientSerializer = serializer;
 
-		Connect(uri, cancellationToken);
+		_timeProvider = timeProvider;
+
+		ConnectAsync(uri, cancellationToken).ConfigureAwait(false).GetAwaiter().GetResult();
 	}
 }

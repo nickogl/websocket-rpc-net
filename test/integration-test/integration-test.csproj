@@ -12,6 +12,7 @@
     <PackageReference Include="Basic.Reference.Assemblies" Version="1.7.9" />
     <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0" PrivateAssets="all" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.11.0" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="9.1.0" />
     <PackageReference Include="Nickogl.AspNetCore.IntegrationTesting" Version="1.0.0" />
   </ItemGroup>
 

@@ -10,7 +10,7 @@ public sealed partial class ChatServer
 
 	public IReadOnlyCollection<string> Messages => _messages;
 
-	public ChatServer(IChatServerSerializer serializer, TimeProvider timeProvider, ILogger<ChatServer> logger)
+	public ChatServer(IChatServerSerializer serializer, TimeProvider timeProvider)
 	{
 		_serializer = serializer;
 		_clientTimeout = TimeSpan.FromSeconds(5);

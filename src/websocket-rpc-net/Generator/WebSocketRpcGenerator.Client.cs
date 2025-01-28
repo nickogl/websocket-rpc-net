@@ -201,6 +201,12 @@ partial class {clientModel.Class.Name} : IDisposable
 
 		return new(_buffer, 0, _bufferOffset);
 	}}
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	private ValueTask __BufferFlush()
+	{{
+		return WebSocket.SendAsync(__BufferGetView(), WebSocketMessageType.Binary, true, Disconnected);
+	}}
 ");
 		if (clientModel.Serializer != null)
 		{
@@ -228,7 +234,7 @@ partial class {clientModel.Class.Name} : IDisposable
 				clientClass.AppendLine($"\t\t\t__BufferWriteParameter(_serializer.{GenerateSerializeCall(param.Type, clientModel.Serializer, param.Name)});");
 			}
 			clientClass.AppendLine(@$"
-			await WebSocket.SendAsync(__BufferGetView(), WebSocketMessageType.Binary, true, Disconnected);
+			await __BufferFlush();
 		}}
 		finally
 		{{
@@ -272,7 +278,7 @@ partial class {clientModel.Class.Name} : IDisposable
 		{{
 			Debug.Assert(_client != null, ""Must not use default constructor"");
 
-			return _client.WebSocket.SendAsync(_client.__BufferGetView(), WebSocketMessageType.Binary, true, _client.Disconnected);
+			return _client.__BufferFlush();
 		}}");
 		foreach (var method in clientModel.Class.Methods)
 		{
@@ -339,22 +345,20 @@ partial class {clientModel.Class.Name} : IDisposable
 		/// Send the accumulated data to the clients.
 		/// </summary>
 		/// <exception cref=""AggregateException"">Sending the data to one or more clients failed.</exception>
-		public async ValueTask Flush()
+		public ValueTask Flush()
 		{{
-			var tasksToAwait = new List<Task>();
+			List<Task>? tasksToAwait = null;
 			foreach (var client in _seenClients)
 			{{
-			 	var task = client.WebSocket.SendAsync(client.__BufferGetView(), WebSocketMessageType.Binary, true, client.Disconnected);
-				if (!task.IsCompleted || task.IsFaulted)
+			 	var valueTask = client.__BufferFlush();
+				if (!valueTask.IsCompleted || valueTask.IsFaulted)
 				{{
 					// We defer faulted tasks throwing exceptions to allow the data to be sent to the other clients
-					tasksToAwait.Add(task.AsTask());
+					(tasksToAwait ??= new()).Add(valueTask.AsTask());
 				}}
 			}}
-			if (tasksToAwait.Count > 0)
-			{{
-				await Task.WhenAll(tasksToAwait);
-			}}
+
+			return tasksToAwait == null ? ValueTask.CompletedTask : new ValueTask(Task.WhenAll(tasksToAwait));
 		}}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]

@@ -10,12 +10,12 @@ public class GeneratorTests(ITestOutputHelper output)
 	private readonly ITestOutputHelper _output = output;
 
 	[Fact]
-	public void GeneratesServerClass()
+	public void GeneratesSources()
 	{
 		var generator = new WebSocketRpcGenerator();
 		var compilation =
 			CSharpCompilation
-				.Create(nameof(GeneratesServerClass))
+				.Create(nameof(GeneratesSources))
 				.WithOptions(new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary))
 				.AddSyntaxTrees(CompilationUtils.SampleAppSyntaxTrees)
 				.AddReferences(CompilationUtils.CommonReferences);

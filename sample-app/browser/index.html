@@ -1,0 +1,35 @@
+<html>
+  <head>
+    <script src="./chatClientSerializerBase.js"></script>
+    <script src="./chatClientBase.js"></script>
+    <script src="./chatClient.js"></script>
+    <script>
+      var chatClient;
+
+      var connect = function() {
+        var url = document.getElementById("url").value;
+        chatClient = new ChatClient(url);
+        chatClient.connect();
+      }
+
+      var send = function() {
+        var message = document.getElementById("message").value;
+        chatClient.postMessage(message);
+      }
+    </script>
+  </head>
+  <body>
+    <h1>Sample App</h1>
+    <h2>Actions</h2>
+    <div>
+      URL: <input id="url" type="text">
+      <button onclick="connect()">Connect</button>
+    </div>
+    <div>
+      Message: <input id="message" type="text">
+      <button onclick="send()">Send</button>
+    </div>
+    <h2>Messages</h1>
+    <ul id="messages"></ul>
+  </body>
+</html>

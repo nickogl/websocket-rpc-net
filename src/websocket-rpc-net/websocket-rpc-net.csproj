@@ -11,7 +11,6 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <IncludeSymbols>true</IncludeSymbols>
     <PackageId>Nickogl.WebSockets.Rpc</PackageId>
     <Version>1.0.0</Version>

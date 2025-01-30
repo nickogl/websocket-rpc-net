@@ -10,7 +10,6 @@
 
   <PropertyGroup>
     <PackAsTool>true</PackAsTool>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <IncludeSymbols>true</IncludeSymbols>
     <PackageId>Nickogl.WebSockets.Rpc.Client</PackageId>
     <Version>1.0.0</Version>

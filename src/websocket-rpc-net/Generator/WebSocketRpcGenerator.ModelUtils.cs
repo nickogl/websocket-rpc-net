@@ -12,13 +12,9 @@ public partial class WebSocketRpcGenerator
 		for (int i = 0; i < type.Length; i++)
 		{
 			var ch = type[i];
-			if (ch == '<')
+			if (char.IsLetter(ch) || char.IsDigit(ch))
 			{
-				escaped.Append(char.ToUpperInvariant(type[++i]));
-			}
-			else if (ch != '.' && ch != '>')
-			{
-				escaped.Append(i == 0 ? char.ToUpperInvariant(ch) : ch);
+				escaped.Append(ch);
 			}
 		}
 		return escaped.ToString();
@@ -43,9 +39,33 @@ public partial class WebSocketRpcGenerator
 	private static string GetFullyQualifiedType(ITypeSymbol typeSymbol)
 	{
 		var type = new StringBuilder();
-		type.Append(GetFullyQualifiedNamespace(typeSymbol.ContainingNamespace));
-		type.Append('.');
-		type.Append(typeSymbol.Name);
+		void AddNamespaceAndType()
+		{
+			type.Append(GetFullyQualifiedNamespace(typeSymbol.ContainingNamespace));
+			type.Append('.');
+			type.Append(typeSymbol.Name);
+		}
+
+		if (typeSymbol is INamedTypeSymbol namedTypeSymbol)
+		{
+			if (namedTypeSymbol.IsTupleType && namedTypeSymbol.TupleElements.Length > 0)
+			{
+				type.Append("(");
+				type.Append(string.Join(", ", namedTypeSymbol.TupleElements.Select(f => $"{GetFullyQualifiedType(f.Type)} {f.Name}")));
+				type.Append(")");
+			}
+			else if (namedTypeSymbol.IsGenericType && namedTypeSymbol.TypeArguments.Length > 0)
+			{
+				AddNamespaceAndType();
+				type.Append("<");
+				type.Append(string.Join(", ", namedTypeSymbol.TypeArguments.Select(GetFullyQualifiedType)));
+				type.Append(">");
+			}
+			else
+			{
+				AddNamespaceAndType();
+			}
+		}
 		if (typeSymbol.NullableAnnotation == NullableAnnotation.Annotated)
 		{
 			type.Append('?');

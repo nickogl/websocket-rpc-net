@@ -27,7 +27,7 @@ public interface {serializerModel.InterfaceName}
 		{
 			if (serializerModel.SupportsDeserialization)
 			{
-				serializerInterface.Append(@$"
+				serializerInterface.AppendLine(@$"
 	/// <summary>
 	/// Deserialize an RPC method parameter of type <typeparamref name=""T""/> from <paramref name=""data""/>.
 	/// </summary>
@@ -35,7 +35,7 @@ public interface {serializerModel.InterfaceName}
 			}
 			if (serializerModel.SupportsSerialization)
 			{
-				serializerInterface.Append(@$"
+				serializerInterface.AppendLine(@$"
 	/// <summary>
 	/// Serialize an RPC method parameter of type <typeparamref name=""T""/>.
 	/// </summary>
@@ -47,25 +47,26 @@ public interface {serializerModel.InterfaceName}
 			foreach (var type in serializerModel.Types)
 			{
 				var escapedType = GetEscapedParameterType(type);
+				var xmlEscapedType = type.Replace("<", "&lt;").Replace(">", "&gt;");
 				if (serializerModel.SupportsDeserialization)
 				{
-					serializerInterface.Append(@$"
+					serializerInterface.AppendLine(@$"
 	/// <summary>
-	/// Deserialize an RPC method parameter of type <c>{type}</c> from <paramref name=""data""/>.
+	/// Deserialize an RPC method parameter of type <c>{xmlEscapedType}</c> from <paramref name=""data""/>.
 	/// </summary>
 	{type} Deserialize{escapedType}(ReadOnlySpan<byte> data);");
 				}
 				if (serializerModel.SupportsSerialization)
 				{
-					serializerInterface.Append(@$"
+					serializerInterface.AppendLine(@$"
 	/// <summary>
-	/// Serialize an RPC method parameter of type <c>{type}</c>.
+	/// Serialize an RPC method parameter of type <c>{xmlEscapedType}</c>.
 	/// </summary>
 	ReadOnlySpan<byte> Serialize{escapedType}({type} data);");
 				}
 			}
 		}
-		serializerInterface.Append("}");
+		serializerInterface.AppendLine("}");
 		context.AddSource($"{serializerModel.InterfaceName}.g.cs", serializerInterface.ToString());
 	}
 }

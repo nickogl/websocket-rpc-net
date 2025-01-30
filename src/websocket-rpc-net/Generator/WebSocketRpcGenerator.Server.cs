@@ -234,8 +234,9 @@ partial class {serverModel.Class.Name}
 									if ({lengthVariable} > _maximumParameterSize) throw new InvalidDataException(""Parameter exceeds maximum length: {param.Name}"");
 									{GenerateReadExactly(lengthVariable, $"var {param.Name} = _serializer.{deserialize}", "Incomplete parameter data", 9)}");
 			}
+			var paramPrefix = method.Parameters.Length > 0 ? ", " : string.Empty;
 			serverClass.AppendLine(@$"
-									await {method.Name}(client, {GenerateParameterList(method.Parameters, types: false)});
+									await {method.Name}(client{paramPrefix}{GenerateParameterList(method.Parameters, types: false)});
 									break;");
 		}
 

@@ -372,8 +372,9 @@ partial class {clientModel.Class.Name} : IDisposable
 		}}");
 		foreach (var method in clientModel.Class.Methods)
 		{
+			var paramPrefix = method.Parameters.Length > 0 ? ", " : string.Empty;
 			clientClass.AppendLine(@$"
-		public void {method.Name}(IEnumerable<{clientModel.Class.Name}> clients, {GenerateParameterList(method.Parameters)})
+		public void {method.Name}(IEnumerable<{clientModel.Class.Name}> clients{paramPrefix}{GenerateParameterList(method.Parameters)})
 		{{
 			var __firstClient = clients.FirstOrDefault();
 			if (__firstClient == null)

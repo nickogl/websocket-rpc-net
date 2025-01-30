@@ -483,12 +483,13 @@ public partial class {testClientModel.ClassName} : IAsyncDisposable
 		{
 			var paramsList = GenerateParameterList(method.Parameters);
 			var argMatcherList = GenerateArgumentMatcherList(method.Parameters);
+			var paramPrefix = method.Parameters.Length > 0 ? ", " : string.Empty;
 			testClientClass.AppendLine(@$"
 		public sealed record class {method.Name}Call({paramsList}) : ICall
 		{{
 		}}
 
-		public sealed record class {method.Name}Interceptor(TaskCompletionSource __waiter, {argMatcherList}) : IInterceptor<{method.Name}Call>
+		public sealed record class {method.Name}Interceptor(TaskCompletionSource __waiter{paramPrefix}{argMatcherList}) : IInterceptor<{method.Name}Call>
 		{{
 			public TaskCompletionSource Waiter {{ get; }} = __waiter;
 
@@ -508,11 +509,12 @@ public partial class {testClientModel.ClassName} : IAsyncDisposable
 		public __Registries __ReceivedCalls {{ get; }} = new();");
 		foreach (var method in testClientModel.ClientClass.Methods)
 		{
+			var paramPrefix = method.Parameters.Length > 0 ? ", " : string.Empty;
 			testClientClass.AppendLine(@$"
 		public async Task {method.Name}({GenerateArgumentMatcherList(method.Parameters)})
 		{{
 			var __waiter = new TaskCompletionSource();
-			var __interceptor = new __Registries.{method.Name}Interceptor(__waiter, {GenerateParameterList(method.Parameters, types: false)});
+			var __interceptor = new __Registries.{method.Name}Interceptor(__waiter{paramPrefix}{GenerateParameterList(method.Parameters, types: false)});
 			__ReceivedCalls.{method.Name}.__AddInterceptor(__interceptor);
 			try
 			{{
@@ -537,10 +539,11 @@ public static class {testClientModel.ClassName}Extensions
 {{");
 		foreach (var method in testClientModel.ClientClass.Methods)
 		{
+			var paramPrefix = method.Parameters.Length > 0 ? ", " : string.Empty;
 			testClientClass.AppendLine(@$"
-	public static IEnumerable<{testClientModel.ClassName}.__Registries.{method.Name}Call> Filter(this {testClientModel.ClassName}.__Registries.Registry<{testClientModel.ClassName}.__Registries.{method.Name}Call, {testClientModel.ClassName}.__Registries.{method.Name}Interceptor> __registry, {GenerateArgumentMatcherList(method.Parameters)})
+	public static IEnumerable<{testClientModel.ClassName}.__Registries.{method.Name}Call> Filter(this {testClientModel.ClassName}.__Registries.Registry<{testClientModel.ClassName}.__Registries.{method.Name}Call, {testClientModel.ClassName}.__Registries.{method.Name}Interceptor> __registry{paramPrefix}{GenerateArgumentMatcherList(method.Parameters)})
 	{{
-		var __interceptor = new {testClientModel.ClassName}.__Registries.{method.Name}Interceptor(null!, {GenerateParameterList(method.Parameters, types: false)});
+		var __interceptor = new {testClientModel.ClassName}.__Registries.{method.Name}Interceptor(null!{paramPrefix}{GenerateParameterList(method.Parameters, types: false)});
 		return __registry.Where(__interceptor.Matches);
 	}}");
 		}

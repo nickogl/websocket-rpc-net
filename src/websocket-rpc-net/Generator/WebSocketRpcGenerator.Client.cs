@@ -6,7 +6,7 @@ namespace Nickogl.WebSockets.Rpc.Generator;
 
 public partial class WebSocketRpcGenerator
 {
-	private static ClientModel? ExtractClientModel(GeneratorSyntaxContext context, CancellationToken cancellationToken)
+	internal static ClientModel? ExtractClientModel(GeneratorSyntaxContext context, CancellationToken cancellationToken)
 	{
 		return context.SemanticModel.GetDeclaredSymbol(context.Node) is INamedTypeSymbol symbol
 			? ExtractClientModel(symbol, cancellationToken, out _)

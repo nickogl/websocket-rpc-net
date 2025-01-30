@@ -6,7 +6,7 @@ namespace Nickogl.WebSockets.Rpc.Generator;
 
 public partial class WebSocketRpcGenerator
 {
-	private static string GetEscapedParameterType(string type)
+	internal static string GetEscapedParameterType(string type)
 	{
 		var escaped = new StringBuilder(capacity: type.Length);
 		for (int i = 0; i < type.Length; i++)
@@ -114,6 +114,7 @@ public partial class WebSocketRpcGenerator
 			}
 		}
 
+		methods.Sort((x, y) => x.Key.CompareTo(y.Key));
 		return new ClassModel()
 		{
 			Namespace = GetFullyQualifiedNamespace(symbol.ContainingNamespace),

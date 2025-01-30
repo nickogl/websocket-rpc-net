@@ -6,7 +6,7 @@ namespace Nickogl.WebSockets.Rpc.Generator;
 
 public partial class WebSocketRpcGenerator
 {
-	private static ServerModel? ExtractServerModel(GeneratorSyntaxContext context, CancellationToken cancellationToken)
+	internal static ServerModel? ExtractServerModel(GeneratorSyntaxContext context, CancellationToken cancellationToken)
 	{
 		return context.SemanticModel.GetDeclaredSymbol(context.Node) is INamedTypeSymbol symbol
 			? ExtractServerModel(symbol, cancellationToken, out _)
@@ -190,10 +190,11 @@ partial class {serverModel.Class.Name}
 
 		try
 		{{
+			await OnConnectedAsync(client);
+
 			// Send initial ping message, this allows the client to know when it entered the message processing loop
 			await SendPingAsync(client.WebSocket, cancellationToken);
 
-			await OnConnectedAsync(client);
 			try
 			{{
 				int __read = 0;

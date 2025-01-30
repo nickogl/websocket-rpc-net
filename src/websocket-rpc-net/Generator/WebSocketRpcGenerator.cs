@@ -30,7 +30,7 @@ public sealed partial class WebSocketRpcGenerator : IIncrementalGenerator
 				(context, model) => GenerateTestClientClass(context, model!.Value));
 	}
 
-	private static bool IsServerOrClientCandidate(SyntaxNode node, CancellationToken cancellationToken)
+	internal static bool IsServerOrClientCandidate(SyntaxNode node, CancellationToken cancellationToken)
 	{
 		return node is ClassDeclarationSyntax classNode &&
 			classNode.AttributeLists.Count > 0 &&

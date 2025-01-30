@@ -61,7 +61,7 @@ public partial class WebSocketRpcGenerator
 				: $"Serialize{GetEscapedParameterType(type)}({innerExpression})";
 	}
 
-	private static string GenerateParameterList(IEnumerable<ParameterModel> parameters, bool types = true)
+	internal static string GenerateParameterList(IEnumerable<ParameterModel> parameters, bool types = true)
 	{
 		return types
 			? string.Join(", ", parameters.Select(param => $"{param.Type} {param.Name}"))

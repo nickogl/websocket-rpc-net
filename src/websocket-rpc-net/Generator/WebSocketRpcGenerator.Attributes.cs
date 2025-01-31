@@ -123,7 +123,7 @@ namespace Nickogl.WebSockets.Rpc;
 /// <para><c>await testClient.Receive.Foo(RpcArg.Any&lt;string&gt;())</c></para>
 /// </remarks>
 /// <typeparam name=""T"">Type of the argument to match.</typeparam>
-public readonly struct RpcArgMatcher<T>(Func<T, bool> predicate) where T : IEquatable<T>
+internal readonly struct RpcArgMatcher<T>(Func<T, bool> predicate)
 {{
 	private readonly Func<T, bool> _predicate = predicate;
 
@@ -158,7 +158,7 @@ public readonly struct RpcArgMatcher<T>(Func<T, bool> predicate) where T : IEqua
 /// <summary>
 /// Helpers to create instances of <see cref=""RpcArgMatcher{{T}}"" />. Usage similar to <c>NSubstitute</c>.
 /// </summary>
-public static class RpcArg
+internal static class RpcArg
 {{
 	/// <summary>
 	/// Create a matcher that only intercepts RPC calls if the provided predicate succeeds.
@@ -166,7 +166,7 @@ public static class RpcArg
 	/// <param name=""predicate"">Predicate to check the transmitted argument.</param>
 	/// <typeparam name=""T"">Type of the argument to check.</typeparam>
 	/// <returns>An argument matcher for use in <c>await testClient.Receive.Foo(...)</c>.</returns>
-	public static RpcArgMatcher<T> Is<T>(Func<T, bool> predicate) where T : IEquatable<T>
+	public static RpcArgMatcher<T> Is<T>(Func<T, bool> predicate)
 	{{
 		return new RpcArgMatcher<T>(predicate);
 	}}
@@ -176,7 +176,7 @@ public static class RpcArg
 	/// </summary>
 	/// <typeparam name=""T"">Type of the argument to check.</typeparam>
 	/// <returns>An argument matcher for use in <c>await testClient.Receive.Foo(...)</c>.</returns>
-	public static RpcArgMatcher<T> Any<T>() where T : IEquatable<T>
+	public static RpcArgMatcher<T> Any<T>()
 	{{
 		return new RpcArgMatcher<T>(_ => true);
 	}}

@@ -104,7 +104,7 @@ using System.Threading;
 
 namespace {testClientModel.ClassNamespace};
 
-public partial class {testClientModel.ClassName} : IAsyncDisposable
+partial class {testClientModel.ClassName} : IAsyncDisposable
 {{
 	private object _syncRoot = new();
 	private ClientWebSocket? _webSocket;
@@ -387,10 +387,10 @@ public partial class {testClientModel.ClassName} : IAsyncDisposable
 			{
 				var endOfMessage = i == (method.Parameters.Length - 1) ? "true" : "false";
 				testClientClass.AppendLine(@$"
-		var __data = _serverSerializer.{GenerateSerializeCall(method.Parameters[i].Type, testClientModel.ServerSerializer, method.Parameters[i].Name)}.ToArray();
-		BinaryPrimitives.WriteInt32LittleEndian(__i32Buffer, __data.Length);
+		var __{method.Parameters[i].Name}data__ = _serverSerializer.{GenerateSerializeCall(method.Parameters[i].Type, testClientModel.ServerSerializer, method.Parameters[i].Name)}.ToArray();
+		BinaryPrimitives.WriteInt32LittleEndian(__i32Buffer, __{method.Parameters[i].Name}data__.Length);
 		await _webSocket.SendAsync(__i32Buffer, WebSocketMessageType.Binary, false, _cts.Token);
-		await _webSocket.SendAsync(__data.AsMemory(), WebSocketMessageType.Binary, {endOfMessage}, _cts.Token);");
+		await _webSocket.SendAsync(__{method.Parameters[i].Name}data__.AsMemory(), WebSocketMessageType.Binary, {endOfMessage}, _cts.Token);");
 			}
 			testClientClass.AppendLine(@$"
 	}}");
@@ -535,7 +535,7 @@ public partial class {testClientModel.ClassName} : IAsyncDisposable
 		// Extension methods to conveniently filter received calls registry
 		//
 		testClientClass.Append(@$"
-public static class {testClientModel.ClassName}Extensions
+internal static class {testClientModel.ClassName}Extensions
 {{");
 		foreach (var method in testClientModel.ClientClass.Methods)
 		{

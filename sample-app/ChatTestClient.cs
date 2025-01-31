@@ -4,7 +4,7 @@ namespace SampleApp;
 
 // HACK: Since we reference the generator project as a library in the integration tests, we have to generate the test client here
 [WebSocketRpcTestClient<ChatServer>]
-public partial class ChatTestClient
+internal partial class ChatTestClient
 {
 	public ChatTestClient(Uri uri, TimeProvider? timeProvider = default, CancellationToken cancellationToken = default)
 	{

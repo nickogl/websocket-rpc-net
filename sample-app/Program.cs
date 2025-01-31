@@ -1,4 +1,7 @@
 using SampleApp;
+using System.Runtime.CompilerServices;
+
+[assembly: InternalsVisibleTo("integration-test")]
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services

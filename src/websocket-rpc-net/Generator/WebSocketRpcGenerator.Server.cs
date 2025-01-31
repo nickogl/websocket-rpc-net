@@ -197,17 +197,17 @@ partial class {serverModel.Class.Name}
 
 			try
 			{{
-				int __read = 0;
-				int __processed = 0;
 				while (client.WebSocket.State == WebSocketState.Open)
 				{{
-					ValueWebSocketReceiveResult __result = default;
 					var __buffer = _allocator.Rent(_messageBufferSize);
 					try
 					{{
+						ValueWebSocketReceiveResult __result = default;
+						int __read = 0;
+						int __processed = 0;
 						do
 						{{
-							{GenerateReadInt32("methodKey", "Incomplete method key", 6)}
+							{GenerateReadInt32("methodKey", "Incomplete method key", 7)}
 
 							switch (methodKey)
 							{{
@@ -242,7 +242,7 @@ partial class {serverModel.Class.Name}
 
 		serverClass.AppendLine(@$"
 								default:
-									throw new InvalidDataException($""Invalid method key: {{methodKey}}"");
+									throw new InvalidDataException($""Invalid method key: {{methodKey}}. Current pos: {{__read}}. Buffer: [{{string.Join(',', __buffer.Select(x => x.ToString()))}}]"");
 							}}
 						}} while (!__result.EndOfMessage);
 					}}

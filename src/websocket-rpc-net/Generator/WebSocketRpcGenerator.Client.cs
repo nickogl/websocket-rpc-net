@@ -63,9 +63,11 @@ public partial class WebSocketRpcGenerator
 			GenerateSerializerInterface(context, clientModel.Serializer.Value);
 		}
 
+		var serializerName = clientModel.Serializer != null ? GetFullyQualifiedType(clientModel.Serializer.Value.InterfaceNamespace, clientModel.Serializer.Value.InterfaceName) : null;
 		var clientClass = new StringBuilder(@$"
 #nullable enable
 
+using Nickogl.WebSockets.Rpc;
 using System;
 using System.Buffers;
 using System.Buffers.Binary;
@@ -80,7 +82,7 @@ namespace {clientModel.Class.Namespace};
 
 /// <inheritdoc />
 /// <remarks>The auto-generated portion of this class is not thread-safe and should not be used from multiple threads concurrently.</remarks>
-partial class {clientModel.Class.Name} : IDisposable
+partial class {clientModel.Class.Name}
 {{
 	private WebSocket? _webSocket;
 
@@ -100,11 +102,6 @@ partial class {clientModel.Class.Name} : IDisposable
 		get {{ Debug.Assert(_disconnected != null); return _disconnected.Value; }}
 		set {{ _disconnected = value; }}
 	}}
-
-	/// <summary>Currently allocated buffer for writing batches or standalone messages.</summary>
-	/// <remarks>Please return this buffer to the <see cref=""_allocator"" /> in the <see cref=""IDisposable"" /> implementation.</remarks>
-	private byte[]? _buffer;
-	private int _bufferOffset;
 
 	/// <summary>Array pool to use for allocating buffers.</summary>
 	private ArrayPool<byte> _allocator = ArrayPool<byte>.Shared;
@@ -127,93 +124,13 @@ partial class {clientModel.Class.Name} : IDisposable
 
 	/// <summary>Maximum size of buffers. Defaults to 16 MiB and only serves as a safeguard against infinite loop bugs in the code while creating batches.</summary>
 	private int _maximumBufferSize = 1024 * 1024 * 16;
-
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	private void __BufferEnsureAtLeast(int size)
-	{{
-		Debug.Assert(_buffer != null);
-
-		var requiredBufferSize = _bufferOffset + size;
-		Debug.Assert(requiredBufferSize <= _maximumBufferSize, $""Requested buffer size ({{requiredBufferSize}} bytes) exceeds maximum buffer size ({{_maximumBufferSize}} bytes). Check if you have an infinite loop and if not, increase _maximumBufferSize to at least {{requiredBufferSize}}."");
-		var actualBufferSize = _buffer.Length;
-		if (requiredBufferSize <= actualBufferSize)
-		{{
-			return;
-		}}
-		while (requiredBufferSize > actualBufferSize)
-		{{
-			actualBufferSize *= 2;
-		}}
-
-		var newBuffer = _allocator.Rent(actualBufferSize);
-		_buffer.AsSpan(0, _bufferOffset).CopyTo(newBuffer.AsSpan());
-		_allocator.Return(_buffer);
-
-		_buffer = newBuffer;
-	}}
-
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	private void __BufferWriteMethodKey(int methodKey)
-	{{
-		Debug.Assert(_buffer != null);
-
-		__BufferEnsureAtLeast(sizeof(int));
-
-		BinaryPrimitives.WriteInt32LittleEndian(_buffer.AsSpan(_bufferOffset, sizeof(int)), methodKey);
-		_bufferOffset += sizeof(int);
-	}}
-
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	private void __BufferWriteParameter(ReadOnlySpan<byte> data)
-	{{
-		Debug.Assert(_buffer != null);
-
-		__BufferEnsureAtLeast(sizeof(int) + data.Length);
-
-		BinaryPrimitives.WriteInt32LittleEndian(_buffer.AsSpan(_bufferOffset, sizeof(int)), data.Length);
-		_bufferOffset += sizeof(int);
-		data.CopyTo(_buffer.AsSpan(_bufferOffset, data.Length));
-		_bufferOffset += data.Length;
-	}}
-
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	private void __BufferCreate(int bufferSize)
-	{{
-		Debug.Assert(_buffer == null, ""Can send only one message or one batch or one broadcast at a time"");
-
-		_buffer = _allocator.Rent(bufferSize);
-		_bufferOffset = 0;
-	}}
-
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	private void __BufferDestroy()
-	{{
-		Debug.Assert(_buffer != null, ""Batch or broadcast seems to have been disposed of twice"");
-
-		_allocator.Return(_buffer);
-		_buffer = null;
-	}}
-
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	private ReadOnlyMemory<byte> __BufferGetView()
-	{{
-		Debug.Assert(_buffer != null, ""No message or batch or broadcast is currently active"");
-
-		return new(_buffer, 0, _bufferOffset);
-	}}
-
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	private ValueTask __BufferFlush()
-	{{
-		return WebSocket.SendAsync(__BufferGetView(), WebSocketMessageType.Binary, true, Disconnected);
-	}}
 ");
 		if (clientModel.Serializer != null)
 		{
 			clientClass.AppendLine(@$"
 	/// <summary>Serializer to serialize and deserialize RPC parameters.</summary>
 	/// <remarks>Initialize this field in the constructor of your class.</remarks>
-	private {GetFullyQualifiedType(clientModel.Serializer.Value.InterfaceNamespace, clientModel.Serializer.Value.InterfaceName)} _serializer;");
+	private {serializerName} _serializer;");
 		}
 		foreach (var method in clientModel.Class.Methods)
 		{
@@ -225,21 +142,14 @@ partial class {clientModel.Class.Name} : IDisposable
 	/// <exception cref=""WebSocketException"">Operation on the client's websocket failed.</exception>
 	public partial async ValueTask {method.Name}({GenerateParameterList(method.Parameters)})
 	{{
-		__BufferCreate(_messageBufferSize);
-		try
-		{{
-			__BufferWriteMethodKey({method.Key});");
+		using var __buffer = new WebSocketRpcBuffer(_allocator, _messageBufferSize, _maximumBufferSize);
+		__buffer.WriteMethodKey({method.Key});");
 			foreach (var param in method.Parameters)
 			{
-				clientClass.AppendLine($"\t\t\t__BufferWriteParameter(_serializer.{GenerateSerializeCall(param.Type, clientModel.Serializer, param.Name)});");
+				clientClass.AppendLine($"\t\t__buffer.WriteParameter(_serializer.{GenerateSerializeCall(param.Type, clientModel.Serializer, param.Name)});");
 			}
 			clientClass.AppendLine(@$"
-			await __BufferFlush();
-		}}
-		finally
-		{{
-			__BufferDestroy();
-		}}
+		await WebSocket.SendAsync(__buffer.AsMemory(), WebSocketMessageType.Binary, true, Disconnected);
 	}}");
 		}
 
@@ -248,109 +158,80 @@ partial class {clientModel.Class.Name} : IDisposable
 		//
 		clientClass.AppendLine(@$"
 	/// <summary>
-	/// Create and send a batch of websocket-rpc messages.
-	/// There can only be a single one in use per client at any time.
+	/// Create and send a batch of websocket-rpc messages to one or more clients.
 	/// </summary>
-	/// <remarks>Contrary to stream implementations, disposing of the batch does not flush the accumulated data.</remarks>
+	/// <remarks>
+	/// <para>Multiple batches for the same client must not be flushed simultaneously.</para>
+	/// <para>Sending the same batch to multiple clients allows you to broadcast messages and only pay for the serialization cost once.</para>
+	/// </remarks>
 	public struct Batch : IDisposable
 	{{
-		private readonly {clientModel.Class.Name} _client;
-
-		public Batch({clientModel.Class.Name} client)
-		{{
-			_client = client;
-			_client.__BufferCreate(client._batchBufferSize);
-		}}
-
-		public void Dispose()
-		{{
-			Debug.Assert(_client != null, ""Must not use default constructor"");
-
-			_client.__BufferDestroy();
-		}}
-
-		/// <summary>
-		/// Send the accumulated data to the client.
-		/// </summary>
-		/// <exception cref=""OperationCanceledException"">Client disconnected or timed out during this operation.</exception>
-		/// <exception cref=""WebSocketException"">Operation on the client's websocket failed.</exception>
-		public ValueTask Flush()
-		{{
-			Debug.Assert(_client != null, ""Must not use default constructor"");
-
-			return _client.__BufferFlush();
-		}}");
-		foreach (var method in clientModel.Class.Methods)
+		private WebSocketRpcBuffer _buffer;");
+		if (clientModel.Serializer != null)
 		{
 			clientClass.AppendLine(@$"
-		public void {method.Name}({GenerateParameterList(method.Parameters)})
-		{{
-			Debug.Assert(_client != null, ""Must not use default constructor"");
-
-			_client.__BufferWriteMethodKey({method.Key});");
-			foreach (var param in method.Parameters)
-			{
-				clientClass.AppendLine($"\t\t\t_client.__BufferWriteParameter(_client._serializer.{GenerateSerializeCall(param.Type, clientModel.Serializer, param.Name)});");
-			}
-			clientClass.Append("\t\t}");
+		private readonly {serializerName} _serializer;");
 		}
-		clientClass.AppendLine(@$"
-	}}");
-
-		//
-		// Broadcasting feature
-		//
-		clientClass.AppendLine(@$"
-	/// <summary>
-	/// Broadcast the same websocket-rpc messages to multiple clients.
-	/// This has the benefit of paying for the serialization cost only once.
-	/// There can be multiple in use at the same time provided that clients are
-	/// part of only one broadcast.
-	/// </summary>
-	/// <remarks>Contrary to stream implementations, disposing of the broadcast does not flush the accumulated data.</remarks>
-	public struct Broadcast : IDisposable
-	{{
-		private readonly ICollection<{clientModel.Class.Name}> _seenClients;
-
+		clientClass.Append(@$"
 		/// <summary>
-		/// Create a new broadcast. It allocates a new collection to keep track of seen clients.
+		/// Create a batch from a client, using its configuration for creating the underlying buffer.
 		/// </summary>
-		public Broadcast()
+		/// <param name=""client"">Client to use configuration from.</param>
+		public Batch({clientModel.Class.Name} client)
 		{{
-			_seenClients = [];
+			_buffer = new WebSocketRpcBuffer(client._allocator, client._batchBufferSize, client._maximumBufferSize);");
+		if (clientModel.Serializer != null)
+		{
+			clientClass.Append(@$"
+			_serializer = client._serializer;");
+		}
+		clientClass.Append(@$"
 		}}
 
 		/// <summary>
-		/// Create a new broadcast and use the provided buffer to keep track of seen clients.
-		/// To reduce allocations, keep recycling N buffers for N concurrent broadcasts.
+		/// Create a batch with the provided configuration.
 		/// </summary>
-		/// <param name=""seenClientsBuffer"">Buffer to keep track of seen clients. MUST BE EMPTY.</param>
-		public Broadcast(ICollection<{clientModel.Class.Name}> seenClientsBuffer)
+		/// <param name=""bufferAllocator"">Array pool to use for allocating buffers</param>
+		/// <param name=""initialBufferSize"">Initial size of the batch buffer in bytes. May grow until <paramref name=""maximumBufferSize""/>. Defaults to 32 KiB.</param>
+		/// <param name=""maximumBufferSize"">Maximum size of buffers in bytes. Defaults to 16 MiB and only serves as a safeguard against infinite loop bugs.</param>
+		public Batch({(clientModel.Serializer != null ? $"{serializerName} serializer, " : string.Empty)}ArrayPool<byte>? bufferAllocator = null, int? initialBufferSize = null, int? maximumBufferSize = null)
 		{{
-			Debug.Assert(seenClientsBuffer.Count == 0, ""Provided buffer for keeping track of seen clients must be empty"");
-
-			_seenClients = seenClientsBuffer;
+			_buffer = new WebSocketRpcBuffer(bufferAllocator, initialBufferSize ?? 1024 * 32, maximumBufferSize ?? 1024 * 1024 * 16);");
+		if (clientModel.Serializer != null)
+		{
+			clientClass.Append(@$"
+			_serializer = serializer;");
+		}
+		clientClass.AppendLine(@$"
 		}}
 
 		public void Dispose()
 		{{
-			foreach (var client in _seenClients)
-			{{
-				client.__BufferDestroy();
-			}}
-			_seenClients.Clear();
+			_buffer.Dispose();
 		}}
 
 		/// <summary>
-		/// Send the accumulated data to the clients.
+		/// Send the accumulated data to the provided client.
+		/// </summary>
+		/// <param name=""client"">Client to send batch to.</param>
+		/// <exception cref=""OperationCanceledException"">Client disconnected or timed out during this operation.</exception>
+		/// <exception cref=""WebSocketException"">Operation on the client's websocket failed.</exception>
+		public ValueTask FlushAsync({clientModel.Class.Name} client)
+		{{
+			return client.WebSocket.SendAsync(_buffer.AsMemory(), WebSocketMessageType.Binary, true, client.Disconnected);
+		}}
+
+		/// <summary>
+		/// Send the accumulated data to multiple clients.
 		/// </summary>
 		/// <exception cref=""AggregateException"">Sending the data to one or more clients failed.</exception>
-		public ValueTask Flush()
+		public ValueTask FlushAsync(IEnumerable<{clientModel.Class.Name}> clients)
 		{{
+			// TODO: We could reduce allocations here by rolling a list backed by ArrayPool<{clientModel.Class.Name}> in the future
 			List<Task>? tasksToAwait = null;
-			foreach (var client in _seenClients)
+			foreach (var client in clients)
 			{{
-			 	var valueTask = client.__BufferFlush();
+			 	var valueTask = FlushAsync(client);
 				if (!valueTask.IsCompleted || valueTask.IsFaulted)
 				{{
 					// We defer faulted tasks throwing exceptions to allow the data to be sent to the other clients
@@ -359,50 +240,21 @@ partial class {clientModel.Class.Name} : IDisposable
 			}}
 
 			return tasksToAwait == null ? ValueTask.CompletedTask : new ValueTask(Task.WhenAll(tasksToAwait));
-		}}
-
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		private void EnsureClient({clientModel.Class.Name} client)
-		{{
-			if (client._buffer == null)
-			{{
-				client.__BufferCreate(client._batchBufferSize);
-				_seenClients.Add(client);
-			}}
 		}}");
 		foreach (var method in clientModel.Class.Methods)
 		{
-			var paramPrefix = method.Parameters.Length > 0 ? ", " : string.Empty;
 			clientClass.AppendLine(@$"
-		public void {method.Name}(IEnumerable<{clientModel.Class.Name}> clients{paramPrefix}{GenerateParameterList(method.Parameters)})
+		public void {method.Name}({GenerateParameterList(method.Parameters)})
 		{{
-			var __firstClient = clients.FirstOrDefault();
-			if (__firstClient == null)
-			{{
-				return;
-			}}");
+			_buffer.WriteMethodKey({method.Key});");
 			foreach (var param in method.Parameters)
 			{
-				clientClass.Append(@$"
-			var __{param.Name}Data = __firstClient._serializer.{GenerateSerializeCall(param.Type, clientModel.Serializer, param.Name)};");
+				clientClass.AppendLine($"\t\t\t_buffer.WriteParameter(_serializer.{GenerateSerializeCall(param.Type, clientModel.Serializer, param.Name)});");
 			}
-			clientClass.AppendLine(@$"
-			foreach (var __client in clients)
-			{{
-				EnsureClient(__client);
-
-				__client.__BufferWriteMethodKey({method.Key});");
-			foreach (var param in method.Parameters)
-			{
-				clientClass.AppendLine($"\t\t\t\t__client.__BufferWriteParameter(__{param.Name}Data);");
-			}
-			clientClass.Append(@$"
-			}}
-		}}");
+			clientClass.Append("\t\t}");
 		}
 		clientClass.AppendLine(@$"
 	}}");
-
 		clientClass.Append("}");
 		context.AddSource($"{clientModel.Class.Name}.g.cs", clientClass.ToString());
 	}

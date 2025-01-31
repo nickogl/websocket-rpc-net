@@ -43,6 +43,7 @@ public class GeneratorTests(ITestOutputHelper output)
 				"IChatServerSerializer.g.cs",
 				"IChatServerTestSerializer.g.cs",
 				"RpcArgMatcher.g.cs",
+				"WebSocketRpcBuffer.g.cs",
 				"WebSocketRpcClientAttribute.g.cs",
 				"WebSocketRpcMethodAttribute.g.cs",
 				"WebSocketRpcSerializationMode.g.cs",

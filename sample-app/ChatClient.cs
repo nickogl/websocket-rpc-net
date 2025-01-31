@@ -10,14 +10,6 @@ public sealed partial class ChatClient
 		_serializer = serializer;
 	}
 
-	public void Dispose()
-	{
-		if (_buffer != null)
-		{
-			_allocator.Return(_buffer);
-		}
-	}
-
 	[WebSocketRpcMethod(1)]
 	public partial ValueTask PostMessage(string message);
 }

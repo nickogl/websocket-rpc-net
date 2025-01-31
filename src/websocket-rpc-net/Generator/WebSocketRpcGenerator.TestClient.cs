@@ -31,21 +31,22 @@ public partial class WebSocketRpcGenerator
 			return null;
 		}
 
+		var testClientNamespace = GetFullyQualifiedNamespace(symbol.ContainingNamespace);
 		var serverSerializerClass = new ClassModel()
 		{
-			Namespace = serverModel.Value.Class.Namespace,
+			Namespace = testClientNamespace,
 			Name = $"{serverModel.Value.Class.Name}Test",
 			Methods = serverModel.Value.Class.Methods,
 		};
 		var clientSerializerClass = new ClassModel()
 		{
-			Namespace = clientModel.Value.Class.Namespace,
+			Namespace = testClientNamespace,
 			Name = $"{clientModel.Value.Class.Name}Test",
 			Methods = clientModel.Value.Class.Methods,
 		};
 		return new TestClientModel()
 		{
-			ClassNamespace = GetFullyQualifiedNamespace(symbol.ContainingNamespace),
+			ClassNamespace = testClientNamespace,
 			ClassName = symbol.Name,
 			ServerClass = serverModel.Value.Class,
 			ClientClass = clientModel.Value.Class,
@@ -93,6 +94,7 @@ public partial class WebSocketRpcGenerator
 
 using Nickogl.WebSockets.Rpc;
 using System;
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections;
 using System.Collections.Generic;
@@ -129,6 +131,12 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 
 	/// <summary>Time provider to use when periodically sending pings.</summary>
 	private TimeProvider? _timeProvider = null;
+
+	/// <summary>Size of the message buffer in bytes. Defaults to 8 KiB.</summary>
+	private int _messageBufferSize = 1024 * 8;
+
+	/// <summary>Maximum size of buffers. Defaults to 16 MiB and only serves as a safeguard against infinite loop bugs.</summary>
+	private int _maximumBufferSize = 1024 * 1024 * 16;
 
 	/// <summary>
 	/// Configure a websocket before connecting to it.
@@ -167,6 +175,12 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 
 	/// <summary>A task that completes once the client has disconnected from the server.</summary>
 	public Task Disconnected => _disconnected.Task.WaitAsync(_receiveTimeout);
+
+	/// <summary>Get the raw websocket to directly send messages with.</summary>
+	public WebSocket WebSocket
+	{{
+		get {{ Debug.Assert(_webSocket != null); return _webSocket; }}
+	}}
 
 	/// <summary>
 	/// Connect to a <see cref=""{testClientModel.ServerClass.Namespace}.{testClientModel.ServerClass.Name}"" /> instance located at <paramref name=""uri""/>.
@@ -289,64 +303,71 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 			while (__webSocket.State == WebSocketState.Open)
 			{{
 				ValueWebSocketReceiveResult __result = default;
-				var __buffer = new byte[8192];
 				var __messageLength = 0;
-				do
+				var __buffer = ArrayPool<byte>.Shared.Rent(8192);
+				try
 				{{
-					__result = await __webSocket.ReceiveAsync(__buffer.AsMemory(__messageLength), cancellationToken);
-					if (__result.MessageType == WebSocketMessageType.Close)
+					do
 					{{
-						await __webSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
-						return;
-					}}
-					if (__result.MessageType != WebSocketMessageType.Binary)
-					{{
-						throw new InvalidDataException($""Invalid message type: {{__result.MessageType}}"");
-					}}
+						__result = await __webSocket.ReceiveAsync(__buffer.AsMemory(__messageLength), cancellationToken);
+						if (__result.MessageType == WebSocketMessageType.Close)
+						{{
+							await __webSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+							return;
+						}}
+						if (__result.MessageType != WebSocketMessageType.Binary)
+						{{
+							throw new InvalidDataException($""Invalid message type: {{__result.MessageType}}"");
+						}}
 
-					__messageLength += __result.Count;
-					if (__messageLength == __buffer.Length)
-					{{
-						var newBuffer = new byte[__buffer.Length * 2];
-						__buffer.CopyTo(newBuffer, 0);
-						__buffer = newBuffer;
-					}}
-				}} while (!__result.EndOfMessage);
+						__messageLength += __result.Count;
+						if (__messageLength == __buffer.Length)
+						{{
+							var newBuffer = new byte[__buffer.Length * 2];
+							__buffer.CopyTo(newBuffer, 0);
+							__buffer = newBuffer;
+						}}
+					}} while (!__result.EndOfMessage);
 
-				var __offset = 0;
-				while (__offset < __messageLength)
-				{{
-					int methodKey = BinaryPrimitives.ReadInt32LittleEndian(__buffer.AsSpan(__offset, sizeof(int)));
-					__offset += sizeof(int);
-					switch (methodKey)
+					var __offset = 0;
+					while (__offset < __messageLength)
 					{{
-						// Initial ping message sent as soon as client entered the processing loop
-						case 0:
-							_connected.TrySetResult();
-							break;");
+						int methodKey = BinaryPrimitives.ReadInt32LittleEndian(__buffer.AsSpan(__offset, sizeof(int)));
+						__offset += sizeof(int);
+						switch (methodKey)
+						{{
+							// Initial ping message sent as soon as client entered the processing loop
+							case 0:
+								_connected.TrySetResult();
+								break;");
 		foreach (var method in testClientModel.ClientClass.Methods)
 		{
 			var paramsList = GenerateParameterList(method.Parameters, types: false);
 			testClientClass.Append(@$"
-						case {method.Key}:");
+							case {method.Key}:");
 			foreach (var param in method.Parameters)
 			{
 				testClientClass.Append(@$"
-							var __{param.Name}Length__ = BinaryPrimitives.ReadInt32LittleEndian(__buffer.AsSpan(__offset, sizeof(int)));
-							__offset += sizeof(int);
-							var {param.Name} = _clientSerializer.{GenerateDeserializeCall(param.Type, testClientModel.ClientSerializer, $"__buffer.AsSpan(__offset, __{param.Name}Length__)")};
-							__offset += __{param.Name}Length__;");
+								var __{param.Name}Length__ = BinaryPrimitives.ReadInt32LittleEndian(__buffer.AsSpan(__offset, sizeof(int)));
+								__offset += sizeof(int);
+								var {param.Name} = _clientSerializer.{GenerateDeserializeCall(param.Type, testClientModel.ClientSerializer, $"__buffer.AsSpan(__offset, __{param.Name}Length__)")};
+								__offset += __{param.Name}Length__;");
 			}
 			testClientClass.Append(@$"
-							On{method.Name}({paramsList});
-							__receiver.__ReceivedCalls.{method.Name}.__AddCall(new({paramsList}));
-							break;
+								On{method.Name}({paramsList});
+								__receiver.__ReceivedCalls.{method.Name}.__AddCall(new({paramsList}));
+								break;
 			");
 		}
 		testClientClass.AppendLine(@$"
-						default:
-							throw new InvalidDataException($""Method with key '{{methodKey}}' does not exist"");
+							default:
+								throw new InvalidDataException($""Method with key '{{methodKey}}' does not exist"");
+						}}
 					}}
+				}}
+				finally
+				{{
+					ArrayPool<byte>.Shared.Return(__buffer);
 				}}
 			}}
 		}}
@@ -374,25 +395,22 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 		//
 		foreach (var method in testClientModel.ServerClass.Methods)
 		{
-			testClientClass.AppendLine(@$"
+			testClientClass.Append(@$"
 	public async ValueTask {method.Name}({GenerateParameterList(method.Parameters)})
 	{{
 		Debug.Assert(_webSocket != null, _lastError);
 		Debug.Assert(_cts != null, _lastError);
 
+		using var __buffer = new WebSocketRpcBuffer(ArrayPool<byte>.Shared, _messageBufferSize, _maximumBufferSize);
 		var __i32Buffer = new byte[4];
-		BinaryPrimitives.WriteInt32LittleEndian(__i32Buffer, {method.Key});
-		await _webSocket.SendAsync(__i32Buffer, WebSocketMessageType.Binary, false, _cts.Token);");
+		__buffer.WriteMethodKey({method.Key});");
 			for (int i = 0; i < method.Parameters.Length; i++)
 			{
-				var endOfMessage = i == (method.Parameters.Length - 1) ? "true" : "false";
-				testClientClass.AppendLine(@$"
-		var __{method.Parameters[i].Name}data__ = _serverSerializer.{GenerateSerializeCall(method.Parameters[i].Type, testClientModel.ServerSerializer, method.Parameters[i].Name)}.ToArray();
-		BinaryPrimitives.WriteInt32LittleEndian(__i32Buffer, __{method.Parameters[i].Name}data__.Length);
-		await _webSocket.SendAsync(__i32Buffer, WebSocketMessageType.Binary, false, _cts.Token);
-		await _webSocket.SendAsync(__{method.Parameters[i].Name}data__.AsMemory(), WebSocketMessageType.Binary, {endOfMessage}, _cts.Token);");
+				testClientClass.Append(@$"
+		__buffer.WriteParameter(_serverSerializer.{GenerateSerializeCall(method.Parameters[i].Type, testClientModel.ServerSerializer, method.Parameters[i].Name)});");
 			}
 			testClientClass.AppendLine(@$"
+		await _webSocket.SendAsync(__buffer.AsMemory(), WebSocketMessageType.Binary, true, _cts.Token);
 	}}");
 		}
 		//

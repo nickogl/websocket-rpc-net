@@ -20,7 +20,7 @@ app.Use(async (context, next) =>
 	if (context.WebSockets.IsWebSocketRequest)
 	{
 		using var webSocket = await context.WebSockets.AcceptWebSocketAsync();
-		using var client = app.Services.GetRequiredService<ChatClient>();
+		var client = app.Services.GetRequiredService<ChatClient>();
 		client.WebSocket = webSocket;
 
 		var server = app.Services.GetRequiredService<ChatServer>();

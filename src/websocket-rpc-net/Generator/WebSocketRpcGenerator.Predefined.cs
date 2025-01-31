@@ -4,7 +4,7 @@ namespace Nickogl.WebSockets.Rpc.Generator;
 
 public partial class WebSocketRpcGenerator
 {
-	private static void GenerateAttributes(IncrementalGeneratorPostInitializationContext context)
+	private static void GeneratePredefined(IncrementalGeneratorPostInitializationContext context)
 	{
 		context.AddSource("WebSocketRpcMethodAttribute.g.cs", @$"
 #if !WEBSOCKET_RPC_EXCLUDE_ATTRIBUTES
@@ -182,5 +182,105 @@ internal static class RpcArg
 	}}
 }}
 #endif");
+
+		context.AddSource("WebSocketRpcBuffer.g.cs", @$"
+#if !WEBSOCKET_RPC_EXCLUDE_ATTRIBUTES
+using System;
+using System.Buffers;
+using System.Buffers.Binary;
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
+
+namespace Nickogl.WebSockets.Rpc;
+
+internal struct WebSocketRpcBuffer : IDisposable
+{{
+	private readonly ArrayPool<byte> _allocator;
+	private byte[] _buffer;
+	private int _offset;
+#if DEBUG
+	private readonly int _maximumSize;
+#endif
+
+	public WebSocketRpcBuffer(ArrayPool<byte> allocator, int initialSize, int maximumSize)
+	{{
+		_allocator = allocator;
+		_buffer = allocator.Rent(initialSize);
+	#if DEBUG
+		_maximumSize = maximumSize;
+	#endif
+	}}
+
+	public void Dispose()
+	{{
+		_allocator.Return(_buffer);
+	}}
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public Span<byte> AsSpan()
+	{{
+		return new(_buffer, 0, _offset);
+	}}
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public Memory<byte> AsMemory()
+	{{
+		return new(_buffer, 0, _offset);
+	}}
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public void WriteMethodKey(int methodKey)
+	{{
+		EnsureAtLeast(sizeof(int));
+
+		BinaryPrimitives.WriteInt32LittleEndian(_buffer.AsSpan(_offset, sizeof(int)), methodKey);
+		_offset += sizeof(int);
+	}}
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public void WriteParameter(ReadOnlySpan<byte> data)
+	{{
+		EnsureAtLeast(sizeof(int) + data.Length);
+
+		BinaryPrimitives.WriteInt32LittleEndian(_buffer.AsSpan(_offset, sizeof(int)), data.Length);
+		_offset += sizeof(int);
+		data.CopyTo(_buffer.AsSpan(_offset, data.Length));
+		_offset += data.Length;
+	}}
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	private void EnsureAtLeast(int size)
+	{{
+		var requiredBufferSize = _offset + size;
+#if DEBUG
+		Debug.Assert(requiredBufferSize <= _maximumSize, $""Requested buffer size ({{requiredBufferSize}} bytes) exceeds maximum buffer size ({{_maximumSize}} bytes). Check if you have an infinite loop and if not, increase _maximumSize to at least {{requiredBufferSize}}."");
+#endif
+		var actualBufferSize = _buffer.Length;
+		if (requiredBufferSize <= actualBufferSize)
+		{{
+			return;
+		}}
+		while (requiredBufferSize > actualBufferSize)
+		{{
+			actualBufferSize *= 2;
+		}}
+
+		var newBuffer = _allocator.Rent(actualBufferSize);
+		try
+		{{
+			_buffer.AsSpan(0, _offset).CopyTo(newBuffer.AsSpan());
+		}}
+		catch (Exception)
+		{{
+			_allocator.Return(newBuffer);
+			throw;
+		}}
+		_allocator.Return(_buffer);
+		_buffer = newBuffer;
+	}}
+}}
+
+#endif
+	");
 	}
 }

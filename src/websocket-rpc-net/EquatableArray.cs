@@ -74,4 +74,9 @@ internal readonly struct EquatableArray<T> : IEquatable<EquatableArray<T>>, IEnu
 	{
 		return !left.Equals(right);
 	}
+
+	public override string ToString()
+	{
+		return $"[{string.Join(", ", _array.Select(item => item.ToString()))}]";
+	}
 }

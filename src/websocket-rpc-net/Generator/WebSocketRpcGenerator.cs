@@ -9,7 +9,7 @@ public sealed partial class WebSocketRpcGenerator : IIncrementalGenerator
 {
 	public void Initialize(IncrementalGeneratorInitializationContext context)
 	{
-		context.RegisterPostInitializationOutput(GenerateAttributes);
+		context.RegisterPostInitializationOutput(GeneratePredefined);
 
 		var servers = context.SyntaxProvider
 				.CreateSyntaxProvider(IsServerOrClientCandidate, ExtractServerModel)

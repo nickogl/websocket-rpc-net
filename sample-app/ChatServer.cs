@@ -35,7 +35,7 @@ public sealed partial class ChatServer
 		{
 			batch.PostMessage(message);
 		}
-		await batch.FlushAsync(client);
+		await batch.SendAsync(client);
 	}
 
 	private partial ValueTask OnDisconnectedAsync(ChatClient client)
@@ -62,7 +62,7 @@ public sealed partial class ChatServer
 		batch.PostMessage(message);
 		try
 		{
-			await batch.FlushAsync(targets);
+			await batch.SendAsync(targets);
 		}
 		catch (Exception)
 		{

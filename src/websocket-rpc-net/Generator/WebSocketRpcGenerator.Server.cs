@@ -225,7 +225,8 @@ partial class {serverModel.Class.Name}
 								//
 								// {method.Name}({GenerateParameterList(method.Parameters, types: false)})
 								//
-								case {method.Key}:");
+								case {method.Key}:
+								{{");
 			foreach (var param in method.Parameters)
 			{
 				var lengthVariable = $"__{param.Name}Length__";
@@ -237,7 +238,8 @@ partial class {serverModel.Class.Name}
 			var paramPrefix = method.Parameters.Length > 0 ? ", " : string.Empty;
 			serverClass.AppendLine(@$"
 									await {method.Name}(client{paramPrefix}{GenerateParameterList(method.Parameters, types: false)});
-									break;");
+									break;
+								}}");
 		}
 
 		serverClass.AppendLine(@$"

@@ -344,7 +344,8 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 		{
 			var paramsList = GenerateParameterList(method.Parameters, types: false);
 			testClientClass.Append(@$"
-							case {method.Key}:");
+							case {method.Key}:
+							{{");
 			foreach (var param in method.Parameters)
 			{
 				testClientClass.Append(@$"
@@ -357,6 +358,7 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 								On{method.Name}({paramsList});
 								__receiver.__ReceivedCalls.{method.Name}.__AddCall(new({paramsList}));
 								break;
+							}}
 			");
 		}
 		testClientClass.AppendLine(@$"

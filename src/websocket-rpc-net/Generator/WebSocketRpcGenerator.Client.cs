@@ -216,7 +216,7 @@ partial class {clientModel.Class.Name}
 		/// <param name=""client"">Client to send batch to.</param>
 		/// <exception cref=""OperationCanceledException"">Client disconnected or timed out during this operation.</exception>
 		/// <exception cref=""WebSocketException"">Operation on the client's websocket failed.</exception>
-		public ValueTask FlushAsync({clientModel.Class.Name} client)
+		public ValueTask SendAsync({clientModel.Class.Name} client)
 		{{
 			return client.WebSocket.SendAsync(_buffer.AsMemory(), WebSocketMessageType.Binary, true, client.Disconnected);
 		}}
@@ -225,13 +225,13 @@ partial class {clientModel.Class.Name}
 		/// Send the accumulated data to multiple clients.
 		/// </summary>
 		/// <exception cref=""AggregateException"">Sending the data to one or more clients failed.</exception>
-		public ValueTask FlushAsync(IEnumerable<{clientModel.Class.Name}> clients)
+		public ValueTask SendAsync(IEnumerable<{clientModel.Class.Name}> clients)
 		{{
 			// TODO: We could reduce allocations here by rolling a list backed by ArrayPool<{clientModel.Class.Name}> in the future
 			List<Task>? tasksToAwait = null;
 			foreach (var client in clients)
 			{{
-			 	var valueTask = FlushAsync(client);
+			 	var valueTask = SendAsync(client);
 				if (!valueTask.IsCompleted || valueTask.IsFaulted)
 				{{
 					// We defer faulted tasks throwing exceptions to allow the data to be sent to the other clients

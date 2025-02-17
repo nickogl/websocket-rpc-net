@@ -302,39 +302,36 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 		{{
 			while (__webSocket.State == WebSocketState.Open)
 			{{
-				ValueWebSocketReceiveResult __result = default;
-				var __messageLength = 0;
-				var __buffer = ArrayPool<byte>.Shared.Rent(8192);
+				var __reader = new MessageReader(_allocator, _messageBufferSize, _maximumMessageSize);
 				try
 				{{
+					ValueWebSocketReceiveResult __result = default;
 					do
 					{{
-						__result = await __webSocket.ReceiveAsync(__buffer.AsMemory(__messageLength), cancellationToken);
+						var __receiveBuffer = __reader.GetReceiveBuffer();
+						__result = await client.WebSocket.ReceiveAsync(__receiveBuffer, __receiveCts.Token);
 						if (__result.MessageType == WebSocketMessageType.Close)
 						{{
-							await __webSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+							try
+							{{
+								await __webSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+							}}
+							catch
+							{{
+							}}
 							return;
 						}}
 						if (__result.MessageType != WebSocketMessageType.Binary)
 						{{
 							throw new InvalidDataException($""Invalid message type: {{__result.MessageType}}"");
 						}}
-
-						__messageLength += __result.Count;
-						if (__messageLength == __buffer.Length)
-						{{
-							var newBuffer = new byte[__buffer.Length * 2];
-							__buffer.CopyTo(newBuffer, 0);
-							__buffer = newBuffer;
-						}}
 					}} while (!__result.EndOfMessage);
 
-					var __offset = 0;
-					while (__offset < __messageLength)
+
+					while (!__reader.EndOfMessage)
 					{{
-						int methodKey = BinaryPrimitives.ReadInt32LittleEndian(__buffer.AsSpan(__offset, sizeof(int)));
-						__offset += sizeof(int);
-						switch (methodKey)
+						var __methodKey = __reader.ReadMethodKey();
+						switch (__methodKey)
 						{{
 							// Initial ping message sent as soon as client entered the processing loop
 							case 0:
@@ -342,17 +339,19 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 								break;");
 		foreach (var method in testClientModel.ClientClass.Methods)
 		{
-			var paramsList = GenerateParameterList(method.Parameters, types: false);
+			var paramsList = GetParameterList(method.Parameters, types: false);
 			testClientClass.Append(@$"
 							case {method.Key}:
 							{{");
 			foreach (var param in method.Parameters)
 			{
+				var deserialize = testClientModel.ClientSerializer!.Value.IsGeneric
+					? $"Deserialize<{param.Type.Name}>"
+					: $"Deserialize{param.Type.EscapedName}";
 				testClientClass.Append(@$"
-								var __{param.Name}Length__ = BinaryPrimitives.ReadInt32LittleEndian(__buffer.AsSpan(__offset, sizeof(int)));
-								__offset += sizeof(int);
-								var {param.Name} = _clientSerializer.{GenerateDeserializeCall(param.Type, testClientModel.ClientSerializer, $"__buffer.AsSpan(__offset, __{param.Name}Length__)")};
-								__offset += __{param.Name}Length__;");
+									__reader.BeginReadParameter();
+									{(param.Type.IsDisposable ? "using " : string.Empty)}var {param.Name} = {deserialize}(__reader);
+									__reader.EndReadParameter();");
 			}
 			testClientClass.Append(@$"
 								On{method.Name}({paramsList});
@@ -363,13 +362,13 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 		}
 		testClientClass.AppendLine(@$"
 							default:
-								throw new InvalidDataException($""Method with key '{{methodKey}}' does not exist"");
+								throw new InvalidDataException($""Method with key '{{__methodKey}}' does not exist"");
 						}}
 					}}
 				}}
 				finally
 				{{
-					ArrayPool<byte>.Shared.Return(__buffer);
+					__reader.Dispose();
 				}}
 			}}
 		}}
@@ -398,7 +397,7 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 		foreach (var method in testClientModel.ServerClass.Methods)
 		{
 			testClientClass.Append(@$"
-	public async ValueTask {method.Name}({GenerateParameterList(method.Parameters)})
+	public async ValueTask {method.Name}({GetParameterList(method.Parameters)})
 	{{
 		Debug.Assert(_webSocket != null, _lastError);
 		Debug.Assert(_cts != null, _lastError);
@@ -408,8 +407,8 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 		__buffer.WriteMethodKey({method.Key});");
 			for (int i = 0; i < method.Parameters.Length; i++)
 			{
-				testClientClass.Append(@$"
-		__buffer.WriteParameter(_serverSerializer.{GenerateSerializeCall(method.Parameters[i].Type, testClientModel.ServerSerializer, method.Parameters[i].Name)});");
+				// 		testClientClass.Append(@$"
+				// __buffer.WriteParameter(_serverSerializer.{GenerateSerializeCall(method.Parameters[i].Type, testClientModel.ServerSerializer, method.Parameters[i].Name)});");
 			}
 			testClientClass.AppendLine(@$"
 		await _webSocket.SendAsync(__buffer.AsMemory(), WebSocketMessageType.Binary, true, _cts.Token);
@@ -421,7 +420,7 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 		foreach (var method in testClientModel.ClientClass.Methods)
 		{
 			testClientClass.Append(@$"
-	partial void On{method.Name}({GenerateParameterList(method.Parameters)});
+	partial void On{method.Name}({GetParameterList(method.Parameters)});
 ");
 		}
 
@@ -501,8 +500,8 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 		}}");
 		foreach (var method in testClientModel.ClientClass.Methods)
 		{
-			var paramsList = GenerateParameterList(method.Parameters);
-			var argMatcherList = GenerateArgumentMatcherList(method.Parameters);
+			var paramsList = GetParameterList(method.Parameters);
+			var argMatcherList = GetArgumentMatcherList(method.Parameters);
 			var paramPrefix = method.Parameters.Length > 0 ? ", " : string.Empty;
 			testClientClass.AppendLine(@$"
 		public sealed record class {method.Name}Call({paramsList}) : ICall
@@ -531,10 +530,10 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 		{
 			var paramPrefix = method.Parameters.Length > 0 ? ", " : string.Empty;
 			testClientClass.AppendLine(@$"
-		public async Task {method.Name}({GenerateArgumentMatcherList(method.Parameters)})
+		public async Task {method.Name}({GetArgumentMatcherList(method.Parameters)})
 		{{
 			var __waiter = new TaskCompletionSource();
-			var __interceptor = new __Registries.{method.Name}Interceptor(__waiter{paramPrefix}{GenerateParameterList(method.Parameters, types: false)});
+			var __interceptor = new __Registries.{method.Name}Interceptor(__waiter{paramPrefix}{GetParameterList(method.Parameters, types: false)});
 			__ReceivedCalls.{method.Name}.__AddInterceptor(__interceptor);
 			try
 			{{
@@ -561,9 +560,9 @@ internal static class {testClientModel.ClassName}Extensions
 		{
 			var paramPrefix = method.Parameters.Length > 0 ? ", " : string.Empty;
 			testClientClass.AppendLine(@$"
-	public static IEnumerable<{testClientModel.ClassName}.__Registries.{method.Name}Call> Filter(this {testClientModel.ClassName}.__Registries.Registry<{testClientModel.ClassName}.__Registries.{method.Name}Call, {testClientModel.ClassName}.__Registries.{method.Name}Interceptor> __registry{paramPrefix}{GenerateArgumentMatcherList(method.Parameters)})
+	public static IEnumerable<{testClientModel.ClassName}.__Registries.{method.Name}Call> Filter(this {testClientModel.ClassName}.__Registries.Registry<{testClientModel.ClassName}.__Registries.{method.Name}Call, {testClientModel.ClassName}.__Registries.{method.Name}Interceptor> __registry{paramPrefix}{GetArgumentMatcherList(method.Parameters)})
 	{{
-		var __interceptor = new {testClientModel.ClassName}.__Registries.{method.Name}Interceptor(null!{paramPrefix}{GenerateParameterList(method.Parameters, types: false)});
+		var __interceptor = new {testClientModel.ClassName}.__Registries.{method.Name}Interceptor(null!{paramPrefix}{GetParameterList(method.Parameters, types: false)});
 		return __registry.Where(__interceptor.Matches);
 	}}");
 		}

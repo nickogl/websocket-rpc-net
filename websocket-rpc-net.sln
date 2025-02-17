@@ -15,6 +15,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "websocket-rpc-net", "src\we
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "websocket-rpc-net-client", "src\websocket-rpc-net-client\websocket-rpc-net-client.csproj", "{04CE222C-7462-4C9E-BD86-6312B09C3D6B}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{177DE549-0908-4441-9C30-214BED01525F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "unit-test", "test\unit-test\unit-test.csproj", "{AD7C19BF-71A4-4512-A719-5559A8D5D8CB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -40,10 +44,15 @@ Global
 		{04CE222C-7462-4C9E-BD86-6312B09C3D6B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{04CE222C-7462-4C9E-BD86-6312B09C3D6B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{04CE222C-7462-4C9E-BD86-6312B09C3D6B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AD7C19BF-71A4-4512-A719-5559A8D5D8CB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AD7C19BF-71A4-4512-A719-5559A8D5D8CB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AD7C19BF-71A4-4512-A719-5559A8D5D8CB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AD7C19BF-71A4-4512-A719-5559A8D5D8CB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{9D6763F8-8214-45FD-A958-2CBBFF31FB39} = {43F9E6AE-4C0F-4BA5-A285-750D7088D246}
 		{AC66E201-7A1B-4935-AEE9-DE95FE4159DA} = {78C357C7-6A74-4B51-B689-13B49471428C}
 		{04CE222C-7462-4C9E-BD86-6312B09C3D6B} = {78C357C7-6A74-4B51-B689-13B49471428C}
+		{AD7C19BF-71A4-4512-A719-5559A8D5D8CB} = {177DE549-0908-4441-9C30-214BED01525F}
 	EndGlobalSection
 EndGlobal

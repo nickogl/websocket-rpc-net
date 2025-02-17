@@ -6,9 +6,22 @@ namespace Nickogl.WebSockets.Rpc.Generator;
 
 public partial class WebSocketRpcGenerator
 {
-	internal static string GetEscapedParameterType(string type)
+	internal static string GetParameterList(IEnumerable<ParameterModel> parameters, bool types = true)
 	{
-		var escaped = new StringBuilder(capacity: type.Length);
+		return types
+			? string.Join(", ", parameters.Select(param => $"{param.Type.Name} {param.Name}"))
+			: string.Join(", ", parameters.Select(param => param.Name));
+	}
+
+	private static string GetArgumentMatcherList(IEnumerable<ParameterModel> parameters)
+	{
+		return string.Join(", ", parameters.Select(param => $"RpcArgMatcher<{param.Type.Name}> {param.Name}"));
+	}
+
+	private static string GetEscapedParameterType(string type)
+	{
+		var prefix = type[type.Length - 1] == '?' ? "Nullable" : string.Empty;
+		var escaped = new StringBuilder(prefix, capacity: type.Length);
 		for (int i = 0; i < type.Length; i++)
 		{
 			var ch = type[i];
@@ -81,6 +94,9 @@ public partial class WebSocketRpcGenerator
 	private static ClassModel? ExtractClassModel(INamedTypeSymbol symbol, ITypeSymbol? firstParameterType = null)
 	{
 		var methods = new List<MethodModel>();
+		var methodKeys = new HashSet<int>();
+		var methodParameterTypeCache = new Dictionary<ITypeSymbol, ParameterTypeModel>(SymbolEqualityComparer.IncludeNullability);
+		var escapedParameterNames = new HashSet<string>();
 		foreach (var member in symbol.GetMembers())
 		{
 			if (member is not IMethodSymbol methodSymbol)
@@ -114,7 +130,7 @@ public partial class WebSocketRpcGenerator
 					// We cannot use SymbolEqualityComparer because deems clients unequal when referencing them from another project
 					(firstParameterType != null && GetFullyQualifiedType(firstParameterType) != GetFullyQualifiedType(methodSymbol.Parameters[0].Type)) ||
 					attribute.ConstructorArguments.Length != 1 || attribute.ConstructorArguments[0].Value is not int methodKey || methodKey <= 0 ||
-					methods.Any(method => method.Key == methodKey))
+					!methodKeys.Add(methodKey))
 				{
 					return null;
 				}
@@ -125,9 +141,28 @@ public partial class WebSocketRpcGenerator
 					Name = methodSymbol.Name,
 					Parameters = new(methodSymbol.Parameters.Skip(firstParameterType == null ? 0 : 1).Select(param =>
 					{
+						if (!methodParameterTypeCache.TryGetValue(param.Type, out var parameterTypeModel))
+						{
+							var fqName = GetFullyQualifiedType(param.Type);
+							var escapedName = GetEscapedParameterType(param.Type.Name);
+							if (!escapedParameterNames.Add(escapedName))
+							{
+								// Need to disambiguate equal escaped names across multiple types
+								escapedName = GetEscapedParameterType(fqName);
+								escapedParameterNames.Add(escapedName);
+							}
+
+							parameterTypeModel = methodParameterTypeCache[param.Type] = new ParameterTypeModel()
+							{
+								Name = GetFullyQualifiedType(param.Type),
+								EscapedName = escapedName,
+								IsDisposable = param.Type.AllInterfaces.Any(type => type.Name == "IDisposable" && type.ContainingNamespace?.Name == "System"),
+							};
+						}
+
 						return new ParameterModel()
 						{
-							Type = GetFullyQualifiedType(param.Type),
+							Type = parameterTypeModel,
 							Name = param.Name,
 						};
 					}))
@@ -152,7 +187,7 @@ public partial class WebSocketRpcGenerator
 		}
 
 		var serializableTypes = metadata.UsesGenericSerialization
-			? EquatableArray<string>.Empty
+			? EquatableArray<ParameterTypeModel>.Empty
 			: new(classModel.Methods.SelectMany(method => method.Parameters).Select(param => param.Type).Distinct());
 		return new SerializerModel(metadata.UsesGenericSerialization, serializableTypes)
 		{

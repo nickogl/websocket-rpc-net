@@ -67,7 +67,7 @@ class {clientModel.Class.Name}SerializerBase
 				{
 					foreach (var type in serverModel.Serializer.Value.Types)
 					{
-						var methodName = $"deserialize{WebSocketRpcGenerator.GetEscapedParameterType(type)}";
+						var methodName = $"deserialize{type.EscapedName}";
 						serializerClass.AppendLine(@$"
 	/**
 	 * Deserialize data into the equivalent of the .NET type '{type}' on the server.
@@ -100,7 +100,7 @@ class {clientModel.Class.Name}SerializerBase
 				{
 					foreach (var type in clientModel.Serializer.Value.Types)
 					{
-						var methodName = $"serialize{WebSocketRpcGenerator.GetEscapedParameterType(type)}";
+						var methodName = $"serialize{type.EscapedName}";
 						serializerClass.AppendLine(@$"
 	/**
 	 * Serialize data into the equivalent of the .NET type '{type}' on the server.
@@ -301,7 +301,7 @@ class {clientModel.Class.Name}Base
 			}
 			clientClass.AppendLine(@$"
 	 */
-	on{method.Name}({WebSocketRpcGenerator.GenerateParameterList(method.Parameters, types: false)}) {{ throw new Error('Must implement abstract method ""on{method.Name}""'); }}");
+	on{method.Name}({WebSocketRpcGenerator.GetParameterList(method.Parameters, types: false)}) {{ throw new Error('Must implement abstract method ""on{method.Name}""'); }}");
 		}
 
 		//
@@ -321,7 +321,7 @@ class {clientModel.Class.Name}Base
 			}
 			clientClass.AppendLine(@$"
 	 */
-	{name}({WebSocketRpcGenerator.GenerateParameterList(method.Parameters, types: false)}) {{
+	{name}({WebSocketRpcGenerator.GetParameterList(method.Parameters, types: false)}) {{
 		var __data = new Uint8Array(4);
 		const __view = new DataView(__data.buffer);
 		__view.setInt32(0, {method.Key}, true);
@@ -330,7 +330,7 @@ class {clientModel.Class.Name}Base
 			{
 				var serializeCall = serverModel.Serializer!.Value.IsGeneric
 					? $"serialize(\"{param.Type}\", {param.Name})"
-					: $"serialize{WebSocketRpcGenerator.GetEscapedParameterType(param.Type)}({param.Name})";
+					: $"serialize{param.Type.EscapedName}({param.Name})";
 				clientClass.Append(@$"
 		const __{param.Name}__ = this.#serializer.{serializeCall};
 		__view.setInt32(0, __{param.Name}__.byteLength, true);
@@ -372,7 +372,7 @@ class {clientModel.Class.Name}Base
 			{
 				var deserializeCall = clientModel.Serializer!.Value.IsGeneric
 					? $"deserialize(\"{param.Type}\", new Uint8Array(__event.data, __currentOffset, __{param.Name}Length__))"
-					: $"deserialize{WebSocketRpcGenerator.GetEscapedParameterType(param.Type)}(new Uint8Array(__event.data, __currentOffset, __{param.Name}Length__))";
+					: $"deserialize{param.Type.EscapedName}(new Uint8Array(__event.data, __currentOffset, __{param.Name}Length__))";
 				clientClass.Append(@$"
 						var __{param.Name}Length__ = __dataView.getUint32(__currentOffset, true);
 						__currentOffset += 4;
@@ -380,7 +380,7 @@ class {clientModel.Class.Name}Base
 						__currentOffset += __{param.Name}Length__;");
 			}
 			clientClass.Append(@$"
-						this.on{method.Name}({WebSocketRpcGenerator.GenerateParameterList(method.Parameters, types: false)});
+						this.on{method.Name}({WebSocketRpcGenerator.GetParameterList(method.Parameters, types: false)});
 						break;");
 		}
 		clientClass.Append(@$"

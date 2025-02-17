@@ -3,7 +3,7 @@ using Nickogl.WebSockets.Rpc;
 namespace SampleApp;
 
 [WebSocketRpcClient(WebSocketRpcSerializationMode.Specialized)]
-public sealed partial class ChatClient
+internal sealed partial class ChatClient
 {
 	public ChatClient(IChatClientSerializer serializer)
 	{

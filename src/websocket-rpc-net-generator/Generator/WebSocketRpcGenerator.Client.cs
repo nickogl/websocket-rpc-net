@@ -80,9 +80,13 @@ using System.Threading;
 
 namespace {clientModel.Class.Namespace};
 
+public abstract class {clientModel.Class.Name}Base
+{{
+}}
+
 /// <inheritdoc />
 /// <remarks>The auto-generated portion of this class is not thread-safe and should not be used from multiple threads concurrently.</remarks>
-partial class {clientModel.Class.Name}
+partial class {clientModel.Class.Name} : {clientModel.Class.Name}Base
 {{
 	private WebSocket? _webSocket;
 
@@ -134,22 +138,28 @@ partial class {clientModel.Class.Name}
 		}
 		foreach (var method in clientModel.Class.Methods)
 		{
-			clientClass.AppendLine(@$"
+			clientClass.Append(@$"
 	/// <summary>
 	/// Call the '{method.Name}' procedure on the client.
 	/// </summary>
 	/// <exception cref=""OperationCanceledException"">Client disconnected or timed out during this operation.</exception>
 	/// <exception cref=""WebSocketException"">Operation on the client's websocket failed.</exception>
-	public partial async ValueTask {method.Name}({GenerateParameterList(method.Parameters)})
+	public partial async ValueTask {method.Name}({GetParameterList(method.Parameters)})
 	{{
-		using var __buffer = new WebSocketRpcBuffer(_allocator, _messageBufferSize, _maximumBufferSize);
-		__buffer.WriteMethodKey({method.Key});");
+		using var __writer = new MessageWriter(_allocator, _messageBufferSize, _maximumBufferSize);
+		__writer.WriteMethodKey({method.Key});");
 			foreach (var param in method.Parameters)
 			{
-				clientClass.AppendLine($"\t\t__buffer.WriteParameter(_serializer.{GenerateSerializeCall(param.Type, clientModel.Serializer, param.Name)});");
+				var serialize = clientModel.Serializer!.Value.IsGeneric
+					? $"Serialize<{param.Type.Name}>"
+					: $"Serialize{param.Type.EscapedName}";
+				clientClass.Append(@$"
+		__writer.BeginWriteParameter();
+		_serializer.{serialize}(__writer, {param.Name});
+		__writer.EndWriteParameter();");
 			}
 			clientClass.AppendLine(@$"
-		await WebSocket.SendAsync(__buffer.AsMemory(), WebSocketMessageType.Binary, true, Disconnected);
+		await WebSocket.SendAsync(_writer.WrittenMemory, WebSocketMessageType.Binary, true, Disconnected);
 	}}");
 		}
 
@@ -164,9 +174,9 @@ partial class {clientModel.Class.Name}
 	/// <para>Multiple batches for the same client must not be flushed simultaneously.</para>
 	/// <para>Sending the same batch to multiple clients allows you to broadcast messages and only pay for the serialization cost once.</para>
 	/// </remarks>
-	public struct Batch : IDisposable
+	public sealed class Batch : IDisposable
 	{{
-		private WebSocketRpcBuffer _buffer;");
+		private readonly MessageWriter _writer;");
 		if (clientModel.Serializer != null)
 		{
 			clientClass.AppendLine(@$"
@@ -179,7 +189,7 @@ partial class {clientModel.Class.Name}
 		/// <param name=""client"">Client to use configuration from.</param>
 		public Batch({clientModel.Class.Name} client)
 		{{
-			_buffer = new WebSocketRpcBuffer(client._allocator, client._batchBufferSize, client._maximumBufferSize);");
+			_buffer = new MessageWriter(client._allocator, client._batchBufferSize, client._maximumBufferSize);");
 		if (clientModel.Serializer != null)
 		{
 			clientClass.Append(@$"
@@ -244,12 +254,12 @@ partial class {clientModel.Class.Name}
 		foreach (var method in clientModel.Class.Methods)
 		{
 			clientClass.AppendLine(@$"
-		public void {method.Name}({GenerateParameterList(method.Parameters)})
+		public void {method.Name}({GetParameterList(method.Parameters)})
 		{{
 			_buffer.WriteMethodKey({method.Key});");
 			foreach (var param in method.Parameters)
 			{
-				clientClass.AppendLine($"\t\t\t_buffer.WriteParameter(_serializer.{GenerateSerializeCall(param.Type, clientModel.Serializer, param.Name)});");
+				//clientClass.AppendLine($"\t\t\t_buffer.WriteParameter(_serializer.{GenerateSerializeCall(param.Type, clientModel.Serializer, param.Name)});");
 			}
 			clientClass.Append("\t\t}");
 		}

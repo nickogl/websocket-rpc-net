@@ -11,7 +11,7 @@ internal readonly record struct SerializerModel
 
 	/// <summary>Fully-qualified RPC parameter types the serializer needs to support.</summary>
 	/// <remarks>If this is non-empty, <see cref="IsGeneric"/> is <c>false</c>.</remarks>
-	public EquatableArray<string> Types { get; }
+	public EquatableArray<ParameterTypeModel> Types { get; }
 
 	/// <summary>Whether or not to the serializer supports serialization.</summary>
 	public required bool SupportsSerialization { get; init; }
@@ -25,7 +25,7 @@ internal readonly record struct SerializerModel
 	/// <summary>Name of the serializer interface.</summary>
 	public required string InterfaceName { get; init; }
 
-	public SerializerModel(bool generic, EquatableArray<string> types)
+	public SerializerModel(bool generic, EquatableArray<ParameterTypeModel> types)
 	{
 		if (generic && types.Length > 0)
 		{

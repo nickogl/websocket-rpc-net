@@ -76,6 +76,7 @@ public partial class WebSocketRpcGenerator
 		var serverClass = new StringBuilder(@$"
 #nullable enable
 
+using Nickogl.WebSockets.Rpc;
 using System;
 using System.Buffers;
 using System.Buffers.Binary;
@@ -85,58 +86,60 @@ using System.Threading;
 
 namespace {serverModel.Class.Namespace};
 
-partial class {serverModel.Class.Name}
+public abstract class {serverModel.Class.Name}Base
 {{
-	/// <summary>Time after which clients are disconnected if they fail to send ping frames.</summary>
-	/// <remarks>Setting this to null (default) disables quick detection of disconnects.</remarks>
-	private TimeSpan? _clientTimeout = null;
-
-	/// <summary>Time provider to use for enforcing <see cref=""_clientTimeout"" />.</summary>
-	private TimeProvider? _timeProvider = null;
-
-	/// <summary>Array pool to use for allocating buffers.</summary>
-	private ArrayPool<byte> _allocator = ArrayPool<byte>.Shared;
-
-	/// <summary>Size of the message buffer in bytes. Defaults to 8 KiB.</summary>
+	/// <summary>Minimum size of the buffer for received messages in bytes.</summary>
 	/// <remarks>
 	/// Choose one that the vast majority of messages will fit into.
-	/// If a message does not fit, the buffer grows exponentially until <see cref=""_maximumMessageSize""/> is reached.
-	/// If you are unsure, choose a generous value first and then consult the recorded metrics to refine it.
+	/// If you are unsure, choose a generous value first and then adapt to the actual usage in the wild.
+	/// If a message does not fit, the buffer grows exponentially until <see cref=""MaximumMessageBufferSize""/> is reached.
 	/// </remarks>
-	private int _messageBufferSize = 1024 * 8;
+	protected abstract int MinimumMessageBufferSize {{ get; }}
 
-	/// <summary>Maximum size of messages. Defaults to 64 KiB.</summary>
+	/// <summary>Maximum size of the buffer for received messages in bytes.</summary>
 	/// <remarks>
 	/// Choose one that all legit messages will fit into.
-	/// If you are unsure, choose a generous value first and then consult the recorded metrics to refine it.
+	/// If you are unsure, choose a generous value first and then adapt to the actual usage in the wild.
+	/// If a message exceeds this size, it is dropped and the client forcefully disconnected.
 	/// </remarks>
-	private int _maximumMessageSize = 1024 * 64;
+	protected abstract int MaximumMessageBufferSize {{ get; }}
 
-	/// <summary>Maximum size of parameters. Defaults to 4 KiB.</summary>
-	/// <remarks>
-	/// Choose one that all parameters of legit messages will fit into.
-	/// If you are unsure, choose a generous value first and then consult the recorded metrics to refine it.
-	/// </remarks>
-	private int _maximumParameterSize = 1024 * 4;
+	/// <summary>Array pool to use for allocating buffers for received messages.</summary>
+	protected virtual ArrayPool<byte> MessageBufferPool => ArrayPool<byte>.Shared;
+
+	/// <summary>Time after which clients are disconnected if they fail to send ping frames.</summary>
+	/// <remarks>Setting this to null (default) disables quick detection of disconnects.</remarks>
+	protected virtual TimeSpan? ClientTimeout => null;
+
+	/// <summary>Time provider to use for enforcing <see cref=""ClientTimeout""/>.</summary>
+	protected virtual TimeProvider? TimeProvider => null;
 ");
 		if (serverModel.Serializer != null)
 		{
 			serverClass.AppendLine(@$"
-	/// <summary>Serializer to serialize and deserialize RPC parameters.</summary>
-	/// <remarks>Initialize this field in the constructor of your class.</remarks>
-	private {GetFullyQualifiedType(serverModel.Serializer.Value.InterfaceNamespace, serverModel.Serializer.Value.InterfaceName)} _serializer;");
+	/// <summary>Serializer to deserialize parameters from RPCs received from clients.</summary>
+	protected abstract {GetFullyQualifiedType(serverModel.Serializer.Value.InterfaceNamespace, serverModel.Serializer.Value.InterfaceName)} Serializer {{ get; }}");
 		}
 		serverClass.Append(@$"
 	/// <summary>
 	/// Called when the client is about to enter the message processing loop.
 	/// </summary>
-	private partial ValueTask OnConnectedAsync({GetFullyQualifiedType(serverModel.ClientClassNamespace, serverModel.ClientClassName)} client);
+	protected virtual ValueTask OnConnectedAsync({GetFullyQualifiedType(serverModel.ClientClassNamespace, serverModel.ClientClassName)} client)
+	{{
+		return ValueTask.CompletedTask;
+	}}
 
 	/// <summary>
 	/// Called when the client has disconnected from the server. Its websocket is unusable at this point.
 	/// </summary>
-	private partial ValueTask OnDisconnectedAsync({GetFullyQualifiedType(serverModel.ClientClassNamespace, serverModel.ClientClassName)} client);
+	protected virtual ValueTask OnDisconnectedAsync({GetFullyQualifiedType(serverModel.ClientClassNamespace, serverModel.ClientClassName)} client)
+	{{
+		return ValueTask.CompletedTask;
+	}}
+}}
 
+partial class {serverModel.Class.Name} : {serverModel.Class.Name}Base
+{{
 	private async ValueTask SendPingAsync(WebSocket webSocket, CancellationToken cancellationToken)
 	{{
 		var message = new byte[] {{ 0, 0, 0, 0 }};
@@ -182,10 +185,10 @@ partial class {serverModel.Class.Name}
 		var __ctReg = cancellationToken.UnsafeRegister(CloseWebSocket, __closeActionState);
 		client.Disconnected = __receiveCts.Token;
 		ITimer? __clientTimeoutTimer = null;
-		if (_clientTimeout != null)
+		if (ClientTimeout != null)
 		{{
 			__clientTimeoutTimer = (_timeProvider ?? TimeProvider.System)
-				.CreateTimer(CloseWebSocket, __closeActionState, _clientTimeout.Value, Timeout.InfiniteTimeSpan);
+				.CreateTimer(CloseWebSocket, __closeActionState, ClientTimeout.Value, Timeout.InfiniteTimeSpan);
 		}}
 
 		try
@@ -199,58 +202,78 @@ partial class {serverModel.Class.Name}
 			{{
 				while (client.WebSocket.State == WebSocketState.Open)
 				{{
-					var __buffer = _allocator.Rent(_messageBufferSize);
+					var __reader = new MessageReader(MessageBufferPool, MinimumMessageBufferSize, MaximumMessageBufferSize);
 					try
 					{{
 						ValueWebSocketReceiveResult __result = default;
-						int __read = 0;
-						int __processed = 0;
 						do
 						{{
-							{GenerateReadInt32("methodKey", "Incomplete method key", 7)}
+							var __receiveBuffer = __reader.GetReceiveBuffer();
+							__result = await client.WebSocket.ReceiveAsync(__receiveBuffer, __receiveCts.Token);
+							if (__result.MessageType == WebSocketMessageType.Close)
+							{{
+								try
+								{{
+									await client.WebSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+								}}
+								catch
+								{{
+								}}
+								return;
+							}}
+							if (__result.MessageType != WebSocketMessageType.Binary)
+							{{
+								throw new InvalidDataException($""Invalid message type: {{__result.MessageType}}"");
+							}}
+						}} while (!__result.EndOfMessage);
 
-							switch (methodKey)
+						while (!__reader.EndOfMessage)
+						{{
+							var __methodKey = __reader.ReadMethodKey();
+							switch (__methodKey)
 							{{
 								case 0:
-									if (__clientTimeoutTimer == null || _clientTimeout == null)
+									if (__clientTimeoutTimer == null)
 									{{
 										throw new InvalidDataException(""Unexpected ping frame; the server is not configured to time out clients"");
 									}}
-									__clientTimeoutTimer.Change(_clientTimeout.Value, Timeout.InfiniteTimeSpan);
+									__clientTimeoutTimer.Change(ClientTimeout!.Value, Timeout.InfiniteTimeSpan);
 									break;
 						");
 		foreach (var method in serverModel.Class.Methods)
 		{
-			serverClass.AppendLine(@$"
+			serverClass.Append(@$"
 								//
-								// {method.Name}({GenerateParameterList(method.Parameters, types: false)})
+								// {method.Name}({GetParameterList(method.Parameters, types: false)})
 								//
 								case {method.Key}:
 								{{");
 			foreach (var param in method.Parameters)
 			{
-				var lengthVariable = $"__{param.Name}Length__";
-				var deserialize = GenerateDeserializeCall(param.Type, serverModel.Serializer, innerExpression: "{0}");
-				serverClass.Append($@"{Indent(9)}{GenerateReadInt32(lengthVariable, "Incomplete parameter length", 9)}
-									if ({lengthVariable} > _maximumParameterSize) throw new InvalidDataException(""Parameter exceeds maximum length: {param.Name}"");
-									{GenerateReadExactly(lengthVariable, $"var {param.Name} = _serializer.{deserialize}", "Incomplete parameter data", 9)}");
+				var deserialize = serverModel.Serializer!.Value.IsGeneric
+					? $"Serializer.Deserialize<{param.Type.Name}>"
+					: $"Serializer.Deserialize{param.Type.EscapedName}";
+				serverClass.Append(@$"
+									__reader.BeginReadParameter();
+									{(param.Type.IsDisposable ? "using " : string.Empty)}var {param.Name} = {deserialize}(__reader);
+									__reader.EndReadParameter();");
 			}
 			var paramPrefix = method.Parameters.Length > 0 ? ", " : string.Empty;
 			serverClass.AppendLine(@$"
-									await {method.Name}(client{paramPrefix}{GenerateParameterList(method.Parameters, types: false)});
+									await {method.Name}(client{paramPrefix}{GetParameterList(method.Parameters, types: false)});
 									break;
 								}}");
 		}
 
 		serverClass.AppendLine(@$"
 								default:
-									throw new InvalidDataException($""Invalid method key: {{methodKey}}. Current pos: {{__read}}. Buffer: [{{string.Join(',', __buffer.Select(x => x.ToString()))}}]"");
+									throw new InvalidDataException($""Invalid method key: {{__methodKey}}"");
 							}}
-						}} while (!__result.EndOfMessage);
+						}}
 					}}
 					finally
 					{{
-						_allocator.Return(__buffer);
+						__reader.Dispose();
 					}}
 				}}
 			}}
@@ -272,10 +295,6 @@ partial class {serverModel.Class.Name}
 	}}
 }}");
 		context.AddSource($"{serverModel.Class.Name}.g.cs", serverClass.ToString());
-
-		byte[] newBuffer = new byte[1];
-		byte[] buffer = new byte[1];
-		buffer.CopyTo(newBuffer.AsSpan());
 	}
 
 	private sealed class ServerMetadata : MetadataBase

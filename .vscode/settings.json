@@ -6,9 +6,8 @@
   "[csharp]": {
     "editor.defaultFormatter": "ms-dotnettools.csharp",
     "editor.formatOnSave": true,
-    "editor.formatOnType": true
   },
-  "omnisharp.organizeImportsOnFormat": true,
+  "dotnet.formatting.organizeImportsOnFormat": true,
   "dotnet.completion.showCompletionItemsFromUnimportedNamespaces": true,
   "dotnet.defaultSolution": "websocket-rpc-net.sln",
   "dotnet.unitTestDebuggingOptions": {

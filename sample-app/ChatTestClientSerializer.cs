@@ -1,5 +1,5 @@
 namespace SampleApp;
 
-public class ChatTestClientSerializer : ChatSerializer, IChatServerTestSerializer, IChatClientTestSerializer
+internal class ChatTestClientSerializer : ChatSerializer, IChatServerTestSerializer, IChatClientTestSerializer
 {
 }

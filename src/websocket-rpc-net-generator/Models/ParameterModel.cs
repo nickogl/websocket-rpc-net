@@ -5,8 +5,8 @@ namespace Nickogl.WebSockets.Rpc.Models;
 /// </summary>
 internal readonly record struct ParameterModel
 {
-	/// <summary>Fully-qualified type of the parameter.</summary>
-	public required string Type { get; init; }
+	/// <summary>Type of the parameter.</summary>
+	public required ParameterTypeModel Type { get; init; }
 
 	/// <summary>Name of the parameter.</summary>
 	public required string Name { get; init; }

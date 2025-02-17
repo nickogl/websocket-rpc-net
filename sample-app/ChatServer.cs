@@ -3,25 +3,22 @@ using Nickogl.WebSockets.Rpc;
 namespace SampleApp;
 
 [WebSocketRpcServer<ChatClient>(WebSocketRpcSerializationMode.Specialized)]
-public sealed partial class ChatServer
+internal sealed partial class ChatServer(IChatServerSerializer serializer, TimeProvider timeProvider)
 {
+	private readonly IChatServerSerializer _serializer = serializer;
+	private readonly TimeProvider _timeProvider = timeProvider;
 	private readonly List<string> _messages = [];
 	private readonly List<ChatClient> _clients = [];
 
+	protected override IChatServerSerializer Serializer => _serializer;
+	protected override TimeProvider? TimeProvider => _timeProvider;
+	protected override TimeSpan? ClientTimeout => TimeSpan.FromSeconds(5);
+	protected override int MinimumMessageBufferSize => 1024;
+	protected override int MaximumMessageBufferSize => 4096;
+
 	public IReadOnlyCollection<string> Messages => _messages;
 
-	public ChatServer(IChatServerSerializer serializer, TimeProvider timeProvider)
-	{
-		_serializer = serializer;
-		_clientTimeout = TimeSpan.FromSeconds(5);
-		_timeProvider = timeProvider;
-	}
-
-	public void Dispose()
-	{
-	}
-
-	private partial async ValueTask OnConnectedAsync(ChatClient client)
+	protected override async ValueTask OnConnectedAsync(ChatClient client)
 	{
 		List<string> messageSnapshot;
 		lock (_clients)
@@ -38,7 +35,7 @@ public sealed partial class ChatServer
 		await batch.SendAsync(client);
 	}
 
-	private partial ValueTask OnDisconnectedAsync(ChatClient client)
+	protected override ValueTask OnDisconnectedAsync(ChatClient client)
 	{
 		lock (_clients)
 		{

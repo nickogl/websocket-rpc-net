@@ -1,3 +1,5 @@
+using Nickogl.WebSockets.Rpc.Internal;
+
 namespace Nickogl.WebSockets.Rpc;
 
 /// <summary>
@@ -14,6 +16,7 @@ namespace Nickogl.WebSockets.Rpc;
 /// </typeparam>
 [AttributeUsage(AttributeTargets.Class)]
 public sealed class RpcServerAttribute<TClient>(RpcParameterSerialization parameterSerialization) : Attribute
+	where TClient : RpcClientBase
 {
 	/// <summary>Get the serialization method to use for RPC parameters.</summary>
 	public RpcParameterSerialization ParameterSerialization { get; } = parameterSerialization;

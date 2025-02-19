@@ -9,7 +9,7 @@ namespace Nickogl.WebSockets.Rpc.UnitTest;
 /// An array pool for testing that returns exactly the amount of requested bytes.
 /// </summary>
 /// <remarks>Additionally, this detects leaks and fails tests that produced them.</remarks>
-public sealed class DeterministicArrayPool<T> : ArrayPool<T>, IDisposable
+internal sealed class DeterministicArrayPool<T> : ArrayPool<T>, IDisposable
 {
 	private readonly Dictionary<T[], string> _rented = [];
 

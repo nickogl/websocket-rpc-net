@@ -8,6 +8,9 @@ internal readonly record struct TestClientModel
 	/// <summary>Name of the test client class.</summary>
 	public required string ClassName { get; init; }
 
+	/// <summary>Visibility of the test client class.</summary>
+	public required string ClassVisibility { get; init; }
+
 	/// <summary>Server class under test.</summary>
 	public required ClassModel ServerClass { get; init; }
 

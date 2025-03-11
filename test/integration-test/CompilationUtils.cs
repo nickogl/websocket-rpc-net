@@ -7,7 +7,9 @@ namespace Nickogl.WebSockets.Rpc.IntegrationTest;
 
 public static class CompilationUtils
 {
-	public readonly static IEnumerable<MetadataReference> CommonReferences = ReferenceAssemblies.NetStandard20;
+	public readonly static IEnumerable<MetadataReference> CommonReferences =
+		ReferenceAssemblies.NetStandard20.Concat([MetadataReference.CreateFromFile(typeof(RpcServerAttribute<>).Assembly.Location)]);
+
 	public readonly static IEnumerable<SyntaxTree> SampleAppSyntaxTrees = [];
 
 	static CompilationUtils()

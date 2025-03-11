@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Nickogl.WebSockets.Rpc.Generator;
 
-public partial class WebSocketRpcGenerator
+public partial class RpcServerGenerator
 {
 	private static TestClientModel? ExtractTestClientModel(GeneratorSyntaxContext context, CancellationToken cancellationToken)
 	{
@@ -32,22 +32,26 @@ public partial class WebSocketRpcGenerator
 		}
 
 		var testClientNamespace = GetFullyQualifiedNamespace(symbol.ContainingNamespace);
+		var testClientVisibility = GetAccessibilityString(symbol.DeclaredAccessibility);
 		var serverSerializerClass = new ClassModel()
 		{
 			Namespace = testClientNamespace,
 			Name = $"{serverModel.Value.Class.Name}Test",
 			Methods = serverModel.Value.Class.Methods,
+			Visibility = testClientVisibility,
 		};
 		var clientSerializerClass = new ClassModel()
 		{
 			Namespace = testClientNamespace,
 			Name = $"{clientModel.Value.Class.Name}Test",
 			Methods = clientModel.Value.Class.Methods,
+			Visibility = testClientVisibility,
 		};
 		return new TestClientModel()
 		{
 			ClassNamespace = testClientNamespace,
 			ClassName = symbol.Name,
+			ClassVisibility = GetAccessibilityString(symbol.DeclaredAccessibility),
 			ServerClass = serverModel.Value.Class,
 			ClientClass = clientModel.Value.Class,
 			// We need to reverse operations for the test client
@@ -60,14 +64,14 @@ public partial class WebSocketRpcGenerator
 	{
 		foreach (var attribute in symbol.GetAttributes())
 		{
-			if (attribute.AttributeClass?.Name != "WebSocketRpcTestClientAttribute")
+			if (!IsRpcTestClientAttribute(attribute))
 			{
 				continue;
 			}
 			// Abort source generation in case of invalid attribute usage
-			if (attribute.AttributeClass.TypeArguments.Length != 1 ||
+			if (attribute.AttributeClass!.TypeArguments.Length != 1 ||
 				attribute.AttributeClass.TypeArguments[0] is not INamedTypeSymbol serverType ||
-				!serverType.GetAttributes().Any(attr => attr.AttributeClass?.Name == "WebSocketRpcServerAttribute"))
+				!serverType.GetAttributes().Any(IsRpcServerAttribute))
 			{
 				return null;
 			}
@@ -93,6 +97,8 @@ public partial class WebSocketRpcGenerator
 #nullable enable
 
 using Nickogl.WebSockets.Rpc;
+using Nickogl.WebSockets.Rpc.Serialization;
+using Nickogl.WebSockets.Rpc.Testing;
 using System;
 using System.Buffers;
 using System.Buffers.Binary;
@@ -106,7 +112,90 @@ using System.Threading;
 
 namespace {testClientModel.ClassNamespace};
 
-partial class {testClientModel.ClassName} : IAsyncDisposable
+{testClientModel.ClassVisibility} abstract class {testClientModel.ClassName}Base
+{{
+	private readonly RpcMessageWriter _messageWriter = new(new()
+	{{
+		Pool = ArrayPool<byte>.Shared,
+		MinimumSize = 1024 * 8,
+		MaximumSize = Array.MaxLength,
+	}});
+
+	private readonly RpcMessageReader _messageReader = new(new()
+	{{
+		Pool = ArrayPool<byte>.Shared,
+		MinimumSize = 1024 * 8,
+		MaximumSize = Array.MaxLength,
+	}});
+");
+		if (testClientModel.ServerSerializer != null)
+		{
+			testClientClass.AppendLine(@$"
+	/// <summary>Serializer to serialize parameters sent to server methods.</summary>
+	protected abstract {GetFullyQualifiedType(testClientModel.ServerSerializer.Value.InterfaceNamespace, testClientModel.ServerSerializer.Value.InterfaceName)} ServerSerializer {{ get; }}");
+		}
+		if (testClientModel.ClientSerializer != null)
+		{
+			testClientClass.AppendLine(@$"
+	/// <summary>Serializer to deserialize parameters for calls received from the server.</summary>
+	protected abstract {GetFullyQualifiedType(testClientModel.ClientSerializer.Value.InterfaceNamespace, testClientModel.ClientSerializer.Value.InterfaceName)} ClientSerializer {{ get; }}");
+		}
+		testClientClass.Append(@$"
+	/// <summary>Maximum time to wait for a call to be received.</summary>
+	/// <remarks>
+	/// This avoids infinitely running tests in case a call is never sent by the server,
+	/// either due to a wrong expectation or a bug. The default of 5 seconds is
+	/// conservative, so it is recommended to tweak this value for each server.
+	/// </remarks>
+	protected virtual TimeSpan ReceiveTimeout => TimeSpan.FromSeconds(5);
+
+	/// <summary>Interval in which to send ping messages to the server.</summary>
+	/// <remarks>
+	/// Setting this to null disables sending ping messages. This causes the client
+	/// to be disconnected if the server requires these messages. Best to set this
+	/// to a lower value than <see cref=""RpcServerBase{{T}}.ClientTimeout""/>.
+	/// </remarks>
+	protected virtual TimeSpan? PingInterval => null;
+
+	/// <summary>Time provider to use for enforcing the <see cref=""PingInterval""/>.</summary>
+	/// <remarks>This allows you to control the flow of time in tests.</remarks>
+	protected virtual TimeProvider? TimeProvider => null;
+
+	/// <summary>
+	/// Configure a websocket before connecting to it.
+	/// </summary>
+	/// <remarks>You may add authentication headers or cookies here.</remarks>
+	/// <param name=""webSocket"">Websocket to configure.</param>
+	protected virtual void ConfigureWebSocket(WebSocket webSocket)
+	{{
+	}}
+
+	/// <summary>See: <see cref=""RpcClientBase.GetMessageWriter""/></summary>
+	protected virtual IRpcMessageWriter GetMessageWriter()
+	{{
+		return _messageWriter;
+	}}
+
+	/// <summary>See: <see cref=""RpcClientBase.ReturnMessageWriter""/></summary>
+	protected virtual void ReturnMessageWriter(IRpcMessageWriter messageWriter)
+	{{
+		messageWriter.Reset();
+	}}
+
+	/// <summary>See: <see cref=""RpcServerBase{{T}}.GetMessageReader""/></summary>
+	protected virtual IRpcMessageReader GetMessageReader()
+	{{
+		return _messageReader;
+	}}
+
+	/// <summary>See: <see cref=""RpcServerBase{{T}}.ReturnMessageReader""/></summary>
+	protected virtual void ReturnMessageReader(IRpcMessageReader messageReader)
+	{{
+		messageReader.Reset();
+	}}
+}}
+
+{testClientModel.ClassVisibility} partial class {testClientModel.ClassName} : {testClientModel.ClassName}Base, IAsyncDisposable
 {{
 	private object _syncRoot = new();
 	private ClientWebSocket? _webSocket;
@@ -118,33 +207,6 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 	private TaskCompletionSource _connected = new();
 	private TaskCompletionSource _disconnected = new();
 
-	/// <summary>Maximum time to wait for a call to be received.</summary>
-	private TimeSpan _receiveTimeout = TimeSpan.FromSeconds(5);
-
-	/// <summary>Interval in which to send ping messages to the server.</summary>
-	/// <remarks>
-	/// Setting this to null disables sending ping messages. This causes the client
-	/// to be disconnected if the server requires these messages. Best to set this
-	/// to a lower value than the client timeout of the server.
-	/// </remarks>
-	private TimeSpan? _pingInterval = null;
-
-	/// <summary>Time provider to use when periodically sending pings.</summary>
-	private TimeProvider? _timeProvider = null;
-
-	/// <summary>Size of the message buffer in bytes. Defaults to 8 KiB.</summary>
-	private int _messageBufferSize = 1024 * 8;
-
-	/// <summary>Maximum size of buffers. Defaults to 16 MiB and only serves as a safeguard against infinite loop bugs.</summary>
-	private int _maximumBufferSize = 1024 * 1024 * 16;
-
-	/// <summary>
-	/// Configure a websocket before connecting to it.
-	/// </summary>
-	/// <remarks>You may add authentication headers or cookies here.</remarks>
-	/// <param name=""webSocket"">Websocket to configure.</param>
-	partial void ConfigureWebSocket(WebSocket webSocket);
-
 	/// <summary>
 	/// Wait until the server sent a call matching your provided arguments.
 	/// This allows tests to not only verify that clients received certain calls,
@@ -152,11 +214,11 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 	/// does not matter if the call already happened or is about to happen.
 	/// </summary>
 	/// <remarks>
-	/// For all methods contained in this object, you can:
+	/// For all parameters for methods contained in this object, you can:
 	/// <list type=""bullet"">
 	/// <item>Require the exact value to be passed</item>
-	/// <item>Require the argument to match certain conditions using <see cref=""RpcArg.Is{{T}}""/></item>
-	/// <item>Allow the argument to be anything using <see cref=""RpcArg.Any{{T}}""/></item>
+	/// <item>Require the argument to match certain conditions using <see cref=""RpcParameter.Is{{T}}""/></item>
+	/// <item>Allow the argument to be anything using <see cref=""RpcParameter.Any{{T}}""/></item>
 	/// </list>
 	/// </remarks>
 	public __Receiver Received
@@ -171,10 +233,10 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 	}}
 
 	/// <summary>A task that completes once the client has connected to the server.</summary>
-	public Task Connected => _connected.Task.WaitAsync(_receiveTimeout);
+	public Task Connected => _connected.Task.WaitAsync(ReceiveTimeout);
 
 	/// <summary>A task that completes once the client has disconnected from the server.</summary>
-	public Task Disconnected => _disconnected.Task.WaitAsync(_receiveTimeout);
+	public Task Disconnected => _disconnected.Task.WaitAsync(ReceiveTimeout);
 
 	/// <summary>Get the raw websocket to directly send messages with.</summary>
 	public WebSocket WebSocket
@@ -208,13 +270,13 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 		_cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 		_receiver = new __Receiver(this);
 		_processMessagesTask = ProcessMessages(_webSocket, _receiver, _cts.Token);
-		if (_pingInterval != null)
+		if (PingInterval != null)
 		{{
-			_pingTask = PingPeriodically(_webSocket, _pingInterval.Value, _cts.Token);
+			_pingTask = PingPeriodically(_webSocket, PingInterval.Value, _cts.Token);
 		}}
 		try
 		{{
-			await Connected;
+			await Connected.ConfigureAwait(false);
 		}}
 		catch (TimeoutException e)
 		{{
@@ -237,7 +299,7 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 		}}
 		try
 		{{
-			await closeTask;
+			await closeTask.ConfigureAwait(false);
 		}}
 		catch (Exception)
 		{{
@@ -252,12 +314,12 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 
 		if (_pingTask != null)
 		{{
-			try {{ await _pingTask; }} catch (Exception) {{ }} finally {{ _pingTask = null; }}
+			try {{ await _pingTask.ConfigureAwait(false); }} catch (Exception) {{ }} finally {{ _pingTask = null; }}
 		}}
 
 		if (_processMessagesTask != null)
 		{{
-			try {{ await _processMessagesTask; }} catch {{ }} finally {{ _processMessagesTask = null; }}
+			try {{ await _processMessagesTask.ConfigureAwait(false); }} catch {{ }} finally {{ _processMessagesTask = null; }}
 		}}
 
 		_receiver = null;
@@ -265,35 +327,20 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 
 	public virtual async ValueTask DisposeAsync()
 	{{
-		await DisconnectAsync();
+		await DisconnectAsync().ConfigureAwait(false);
 	}}
 
 	private async Task PingPeriodically(WebSocket webSocket, TimeSpan interval, CancellationToken cancellationToken)
 	{{
-		var timeProvider = _timeProvider ?? TimeProvider.System;
+		var timeProvider = TimeProvider ?? TimeProvider.System;
 		var pingMessage = new byte[4] {{ 0, 0, 0, 0 }};
 		while (!cancellationToken.IsCancellationRequested && webSocket.State == WebSocketState.Open)
 		{{
-			await webSocket.SendAsync(pingMessage.AsMemory(), WebSocketMessageType.Binary, true, cancellationToken);
-			await Task.Delay(interval, timeProvider);
+			await webSocket.SendAsync(pingMessage.AsMemory(), WebSocketMessageType.Binary, true, cancellationToken).ConfigureAwait(false);
+			await Task.Delay(interval, timeProvider).ConfigureAwait(false);
 		}}
 	}}
 ");
-		if (testClientModel.ServerSerializer != null)
-		{
-			testClientClass.AppendLine(@$"
-	/// <summary>Serializer to serialize parameters sent to server methods.</summary>
-	/// <remarks>Initialize this field in the constructor of your test client class.</remarks>
-	private {GetFullyQualifiedType(testClientModel.ServerSerializer.Value.InterfaceNamespace, testClientModel.ServerSerializer.Value.InterfaceName)} _serverSerializer;");
-		}
-		if (testClientModel.ClientSerializer != null)
-		{
-			testClientClass.AppendLine(@$"
-	/// <summary>Serializer to deserialize parameters for calls received from the server.</summary>
-	/// <remarks>Initialize this field in the constructor of your test client class.</remarks>
-	private {GetFullyQualifiedType(testClientModel.ClientSerializer.Value.InterfaceNamespace, testClientModel.ClientSerializer.Value.InterfaceName)} _clientSerializer;");
-		}
-
 		// RPC receive implementation
 		testClientClass.Append(@$"
 	private async Task ProcessMessages(WebSocket __webSocket, __Receiver __receiver, CancellationToken cancellationToken)
@@ -302,19 +349,19 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 		{{
 			while (__webSocket.State == WebSocketState.Open)
 			{{
-				var __reader = new MessageReader(_allocator, _messageBufferSize, _maximumMessageSize);
+				var __reader = GetMessageReader();
 				try
 				{{
 					ValueWebSocketReceiveResult __result = default;
 					do
 					{{
-						var __receiveBuffer = __reader.GetReceiveBuffer();
-						__result = await client.WebSocket.ReceiveAsync(__receiveBuffer, __receiveCts.Token);
+						var __buffer = __reader.ReceiveBuffer.GetMemory();
+						__result = await __webSocket.ReceiveAsync(__buffer, cancellationToken).ConfigureAwait(false);
 						if (__result.MessageType == WebSocketMessageType.Close)
 						{{
 							try
 							{{
-								await __webSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+								await __webSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, default).ConfigureAwait(false);
 							}}
 							catch
 							{{
@@ -325,8 +372,8 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 						{{
 							throw new InvalidDataException($""Invalid message type: {{__result.MessageType}}"");
 						}}
+						__reader.ReceiveBuffer.Advance(__result.Count);
 					}} while (!__result.EndOfMessage);
-
 
 					while (!__reader.EndOfMessage)
 					{{
@@ -346,16 +393,18 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 			foreach (var param in method.Parameters)
 			{
 				var deserialize = testClientModel.ClientSerializer!.Value.IsGeneric
-					? $"Deserialize<{param.Type.Name}>"
-					: $"Deserialize{param.Type.EscapedName}";
+					? $"ClientSerializer.Deserialize<{param.Type.Name}>"
+					: $"ClientSerializer.Deserialize{param.Type.EscapedName}";
 				testClientClass.Append(@$"
 									__reader.BeginReadParameter();
-									{(param.Type.IsDisposable ? "using " : string.Empty)}var {param.Name} = {deserialize}(__reader);
+									{(param.Type.IsDisposable ? "using " : string.Empty)}var {param.Name} = {deserialize}(__reader.ParameterReader);
 									__reader.EndReadParameter();");
 			}
 			testClientClass.Append(@$"
 								On{method.Name}({paramsList});
-								__receiver.__ReceivedCalls.{method.Name}.__AddCall(new({paramsList}));
+								var call = new __Registries.__{method.Name}Call({paramsList});
+								__receiver.__ReceivedCalls.__All.Add(call);
+								__receiver.__ReceivedCalls.{method.Name}.AddCall(call);
 								break;
 							}}
 			");
@@ -402,16 +451,27 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 		Debug.Assert(_webSocket != null, _lastError);
 		Debug.Assert(_cts != null, _lastError);
 
-		using var __buffer = new WebSocketRpcBuffer(ArrayPool<byte>.Shared, _messageBufferSize, _maximumBufferSize);
-		var __i32Buffer = new byte[4];
-		__buffer.WriteMethodKey({method.Key});");
-			for (int i = 0; i < method.Parameters.Length; i++)
+		var __messageWriter = GetMessageWriter();
+		try
+		{{
+			__messageWriter.WriteMethodKey({method.Key});");
+			foreach (var param in method.Parameters)
 			{
-				// 		testClientClass.Append(@$"
-				// __buffer.WriteParameter(_serverSerializer.{GenerateSerializeCall(method.Parameters[i].Type, testClientModel.ServerSerializer, method.Parameters[i].Name)});");
+				var serialize = testClientModel.ServerSerializer!.Value.IsGeneric
+					? $"ServerSerializer.Serialize<{param.Type.Name}>"
+					: $"ServerSerializer.Serialize{param.Type.EscapedName}";
+				testClientClass.Append(@$"
+			__messageWriter.BeginWriteParameter();
+			{serialize}(__messageWriter.ParameterWriter, {param.Name});
+			__messageWriter.EndWriteParameter();");
 			}
 			testClientClass.AppendLine(@$"
-		await _webSocket.SendAsync(__buffer.AsMemory(), WebSocketMessageType.Binary, true, _cts.Token);
+			await _webSocket.SendAsync(__messageWriter.WrittenMemory, WebSocketMessageType.Binary, true, _cts.Token);
+		}}
+		finally
+		{{
+			ReturnMessageWriter(__messageWriter);
+		}}
 	}}");
 		}
 		//
@@ -441,7 +501,7 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 			bool Matches(TCall call);
 		}}
 
-		public sealed class Registry<TCall, TInterceptor> : IEnumerable<TCall>
+		public sealed class __Registry<TCall, TInterceptor> : IEnumerable<TCall>
 			where TCall : ICall
 			where TInterceptor : IInterceptor<TCall>
 		{{
@@ -449,7 +509,7 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 			private readonly List<TCall> _unconsumedCalls = [];
 			private readonly List<TInterceptor> _interceptors = [];
 
-			public void __AddCall(TCall call)
+			public void AddCall(TCall call)
 			{{
 				lock (_interceptors)
 				{{
@@ -469,7 +529,7 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 				}}
 			}}
 
-			public void __AddInterceptor(TInterceptor interceptor)
+			public void AddInterceptor(TInterceptor interceptor)
 			{{
 				lock (_interceptors)
 				{{
@@ -497,25 +557,52 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 			}}
 
 			IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
-		}}");
+		}}
+
+		public List<ICall> __All {{ get; }} = new();");
 		foreach (var method in testClientModel.ClientClass.Methods)
 		{
 			var paramsList = GetParameterList(method.Parameters);
-			var argMatcherList = GetArgumentMatcherList(method.Parameters);
+			var argMatcherList = GetParameterMatcherList(method.Parameters);
 			var paramPrefix = method.Parameters.Length > 0 ? ", " : string.Empty;
-			testClientClass.AppendLine(@$"
-		public sealed record class {method.Name}Call({paramsList}) : ICall
+			testClientClass.Append(@$"
+		public sealed record class __{method.Name}Call({paramsList}) : ICall
 		{{
+			public override string ToString()
+			{{
+				var result = new StringBuilder(""{method.Name}("");");
+			for (int i = 0; i < method.Parameters.Length; i++)
+			{
+				if (method.Parameters[i].Type.Name == "System.String")
+				{
+					testClientClass.Append(@$"
+				result.Append('""');
+				result.Append({method.Parameters[i].Name});
+				result.Append('""');");
+				}
+				else
+				{
+					testClientClass.Append(@$"
+				result.Append({method.Parameters[i].Name}.ToString());");
+				}
+				if (i != method.Parameters.Length - 1)
+				{
+					testClientClass.Append("result.Append(\", \")");
+				}
+			}
+			testClientClass.Append(@$"
+				return result.Append(')').ToString();
+			}}
 		}}
 
-		public sealed record class {method.Name}Interceptor(TaskCompletionSource __waiter{paramPrefix}{argMatcherList}) : IInterceptor<{method.Name}Call>
+		public sealed record class __{method.Name}Interceptor(TaskCompletionSource __waiter{paramPrefix}{argMatcherList}) : IInterceptor<__{method.Name}Call>
 		{{
 			public TaskCompletionSource Waiter {{ get; }} = __waiter;
 
-			public bool Matches({method.Name}Call call) => {string.Join(" && ", method.Parameters.Select(param => $"{param.Name}.Matches(call.{param.Name})"))};
+			public bool Matches(__{method.Name}Call call) => {string.Join(" && ", method.Parameters.Select(param => $"{param.Name}.Matches(call.{param.Name})"))};
 		}}
 
-		public Registry<{method.Name}Call, {method.Name}Interceptor> {method.Name} {{ get; }} = new();");
+		public __Registry<__{method.Name}Call, __{method.Name}Interceptor> {method.Name} {{ get; }} = new();");
 		}
 		testClientClass.AppendLine(@$"
 	}}");
@@ -530,19 +617,19 @@ partial class {testClientModel.ClassName} : IAsyncDisposable
 		{
 			var paramPrefix = method.Parameters.Length > 0 ? ", " : string.Empty;
 			testClientClass.AppendLine(@$"
-		public async Task {method.Name}({GetArgumentMatcherList(method.Parameters)})
+		public async Task {method.Name}({GetParameterMatcherList(method.Parameters)})
 		{{
 			var __waiter = new TaskCompletionSource();
-			var __interceptor = new __Registries.{method.Name}Interceptor(__waiter{paramPrefix}{GetParameterList(method.Parameters, types: false)});
-			__ReceivedCalls.{method.Name}.__AddInterceptor(__interceptor);
+			var __interceptor = new __Registries.__{method.Name}Interceptor(__waiter{paramPrefix}{GetParameterList(method.Parameters, types: false)});
+			__ReceivedCalls.{method.Name}.AddInterceptor(__interceptor);
 			try
 			{{
 				// Wait a maximum amount of time to avoid tests running infinitely
-				await __waiter.Task.WaitAsync(_client._receiveTimeout, _client._cts?.Token ?? default);
+				await __waiter.Task.WaitAsync(_client.ReceiveTimeout, _client._cts?.Token ?? default);
 			}}
 			catch (TimeoutException e)
 			{{
-				throw new TimeoutException($""Did not receive a call to '{method.Name}' matching the provided args within {{_client._receiveTimeout.TotalSeconds:n1}} seconds"", e);
+				throw new TimeoutException($""Did not receive a call to '{method.Name}' matching the provided args within {{_client.ReceiveTimeout.TotalSeconds:n1}} seconds.\nReceived calls in order:\n- {{string.Join(""\n- "", __ReceivedCalls.__All.Select(call => call.ToString()))}}"", e);
 			}}
 		}}");
 		}
@@ -560,9 +647,9 @@ internal static class {testClientModel.ClassName}Extensions
 		{
 			var paramPrefix = method.Parameters.Length > 0 ? ", " : string.Empty;
 			testClientClass.AppendLine(@$"
-	public static IEnumerable<{testClientModel.ClassName}.__Registries.{method.Name}Call> Filter(this {testClientModel.ClassName}.__Registries.Registry<{testClientModel.ClassName}.__Registries.{method.Name}Call, {testClientModel.ClassName}.__Registries.{method.Name}Interceptor> __registry{paramPrefix}{GetArgumentMatcherList(method.Parameters)})
+	public static IEnumerable<{testClientModel.ClassName}.__Registries.__{method.Name}Call> Filter(this {testClientModel.ClassName}.__Registries.__Registry<{testClientModel.ClassName}.__Registries.__{method.Name}Call, {testClientModel.ClassName}.__Registries.__{method.Name}Interceptor> __registry{paramPrefix}{GetParameterMatcherList(method.Parameters)})
 	{{
-		var __interceptor = new {testClientModel.ClassName}.__Registries.{method.Name}Interceptor(null!{paramPrefix}{GetParameterList(method.Parameters, types: false)});
+		var __interceptor = new {testClientModel.ClassName}.__Registries.__{method.Name}Interceptor(null!{paramPrefix}{GetParameterList(method.Parameters, types: false)});
 		return __registry.Where(__interceptor.Matches);
 	}}");
 		}

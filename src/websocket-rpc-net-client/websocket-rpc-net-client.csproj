@@ -37,6 +37,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\websocket-rpc-net\websocket-rpc-net.csproj" PrivateAssets="All" />
+    <ProjectReference Include="..\websocket-rpc-net-generator\websocket-rpc-net-generator.csproj" PrivateAssets="All" />
   </ItemGroup>
 
 </Project>

@@ -25,6 +25,9 @@ internal readonly record struct SerializerModel
 	/// <summary>Name of the serializer interface.</summary>
 	public required string InterfaceName { get; init; }
 
+	/// <summary>Visibility of the serializer interface.</summary>
+	public required string InterfaceVisiblity { get; init; }
+
 	public SerializerModel(bool generic, EquatableArray<ParameterTypeModel> types)
 	{
 		if (generic && types.Length > 0)

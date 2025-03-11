@@ -5,15 +5,15 @@ using System.Text;
 namespace Nickogl.WebSockets.Rpc.Generator;
 
 // No [Generator] attribute as we do not want to automatically generate JavaScript in a .NET build
-public sealed class WebSocketRpcClientGenerator : IIncrementalGenerator
+public sealed class RpcClientGenerator : IIncrementalGenerator
 {
 	public void Initialize(IncrementalGeneratorInitializationContext context)
 	{
 		var servers = context.SyntaxProvider
-				.CreateSyntaxProvider(WebSocketRpcGenerator.IsServerOrClientCandidate, WebSocketRpcGenerator.ExtractServerModel)
+				.CreateSyntaxProvider(RpcServerGenerator.IsServerOrClientCandidate, RpcServerGenerator.ExtractServerModel)
 				.Where(model => model is not null);
 		var clients = context.SyntaxProvider
-				.CreateSyntaxProvider(WebSocketRpcGenerator.IsServerOrClientCandidate, WebSocketRpcGenerator.ExtractClientModel)
+				.CreateSyntaxProvider(RpcServerGenerator.IsServerOrClientCandidate, RpcServerGenerator.ExtractClientModel)
 				.Where(model => model is not null);
 		context.RegisterSourceOutput(servers.Collect().Combine(clients.Collect()),
 				(context, source) =>
@@ -301,7 +301,7 @@ class {clientModel.Class.Name}Base
 			}
 			clientClass.AppendLine(@$"
 	 */
-	on{method.Name}({WebSocketRpcGenerator.GetParameterList(method.Parameters, types: false)}) {{ throw new Error('Must implement abstract method ""on{method.Name}""'); }}");
+	on{method.Name}({RpcServerGenerator.GetParameterList(method.Parameters, types: false)}) {{ throw new Error('Must implement abstract method ""on{method.Name}""'); }}");
 		}
 
 		//
@@ -321,7 +321,7 @@ class {clientModel.Class.Name}Base
 			}
 			clientClass.AppendLine(@$"
 	 */
-	{name}({WebSocketRpcGenerator.GetParameterList(method.Parameters, types: false)}) {{
+	{name}({RpcServerGenerator.GetParameterList(method.Parameters, types: false)}) {{
 		var __data = new Uint8Array(4);
 		const __view = new DataView(__data.buffer);
 		__view.setInt32(0, {method.Key}, true);
@@ -380,7 +380,7 @@ class {clientModel.Class.Name}Base
 						__currentOffset += __{param.Name}Length__;");
 			}
 			clientClass.Append(@$"
-						this.on{method.Name}({WebSocketRpcGenerator.GetParameterList(method.Parameters, types: false)});
+						this.on{method.Name}({RpcServerGenerator.GetParameterList(method.Parameters, types: false)});
 						break;");
 		}
 		clientClass.Append(@$"

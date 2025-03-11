@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Nickogl.WebSockets.Rpc.Generator;
 
-public partial class WebSocketRpcGenerator
+public partial class RpcServerGenerator
 {
 	internal static string GetParameterList(IEnumerable<ParameterModel> parameters, bool types = true)
 	{
@@ -13,9 +13,9 @@ public partial class WebSocketRpcGenerator
 			: string.Join(", ", parameters.Select(param => param.Name));
 	}
 
-	private static string GetArgumentMatcherList(IEnumerable<ParameterModel> parameters)
+	private static string GetParameterMatcherList(IEnumerable<ParameterModel> parameters)
 	{
-		return string.Join(", ", parameters.Select(param => $"RpcArgMatcher<{param.Type.Name}> {param.Name}"));
+		return string.Join(", ", parameters.Select(param => $"RpcParameterMatcher<{param.Type.Name}> {param.Name}"));
 	}
 
 	private static string GetEscapedParameterType(string type)
@@ -91,6 +91,34 @@ public partial class WebSocketRpcGenerator
 		return string.IsNullOrEmpty(@namespace) ? type : $"{@namespace}.{type}";
 	}
 
+	private static bool IsRpcMethodAttribute(AttributeData attributeData)
+	{
+		return attributeData.AttributeClass != null &&
+			!attributeData.AttributeClass.IsGenericType &&
+			attributeData.AttributeClass.ToDisplayString() == "Nickogl.WebSockets.Rpc.RpcMethodAttribute";
+	}
+
+	private static bool IsRpcServerAttribute(AttributeData attributeData)
+	{
+		return attributeData.AttributeClass != null &&
+			attributeData.AttributeClass.IsGenericType &&
+			attributeData.AttributeClass.ConstructedFrom.ToDisplayString() == "Nickogl.WebSockets.Rpc.RpcServerAttribute<TClient>";
+	}
+
+	private static bool IsRpcClientAttribute(AttributeData attributeData)
+	{
+		return attributeData.AttributeClass != null &&
+			!attributeData.AttributeClass.IsGenericType &&
+			attributeData.AttributeClass.ToDisplayString() == "Nickogl.WebSockets.Rpc.RpcClientAttribute";
+	}
+
+	private static bool IsRpcTestClientAttribute(AttributeData attributeData)
+	{
+		return attributeData.AttributeClass != null &&
+			attributeData.AttributeClass.IsGenericType &&
+			attributeData.AttributeClass.ConstructedFrom.ToDisplayString() == "Nickogl.WebSockets.Rpc.Testing.RpcTestClientAttribute<TServer>";
+	}
+
 	private static ClassModel? ExtractClassModel(INamedTypeSymbol symbol, ITypeSymbol? firstParameterType = null)
 	{
 		var methods = new List<MethodModel>();
@@ -105,7 +133,7 @@ public partial class WebSocketRpcGenerator
 			}
 			foreach (var attribute in methodSymbol.GetAttributes())
 			{
-				if (attribute.AttributeClass?.Name != "WebSocketRpcMethodAttribute")
+				if (!IsRpcMethodAttribute(attribute))
 				{
 					continue;
 				}
@@ -175,7 +203,18 @@ public partial class WebSocketRpcGenerator
 		{
 			Namespace = GetFullyQualifiedNamespace(symbol.ContainingNamespace),
 			Name = symbol.Name,
+			Visibility = GetAccessibilityString(symbol.DeclaredAccessibility),
 			Methods = new(methods),
+		};
+	}
+
+	private static string GetAccessibilityString(Accessibility accessibility)
+	{
+		return accessibility switch
+		{
+			Accessibility.Private => "private",
+			Accessibility.Public => "public",
+			_ => "internal",
 		};
 	}
 
@@ -195,6 +234,7 @@ public partial class WebSocketRpcGenerator
 			SupportsSerialization = isClient,
 			InterfaceNamespace = classModel.Namespace,
 			InterfaceName = $"I{classModel.Name}Serializer",
+			InterfaceVisiblity = classModel.Visibility,
 		};
 	}
 

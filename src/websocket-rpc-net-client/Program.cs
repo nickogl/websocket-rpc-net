@@ -11,7 +11,7 @@ var root = new RootCommand("Generate a websocket-rpc client for the browser") { 
 root.SetHandler((source, output) =>
 {
 	var sourceFiles = source.GetFiles("*.cs", SearchOption.AllDirectories);
-	var generator = new WebSocketRpcClientGenerator();
+	var generator = new RpcClientGenerator();
 	var compilation =
 		CSharpCompilation
 			.Create("client")

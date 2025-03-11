@@ -5,12 +5,10 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace Nickogl.WebSockets.Rpc.Generator;
 
 [Generator]
-public sealed partial class WebSocketRpcGenerator : IIncrementalGenerator
+public sealed partial class RpcServerGenerator : IIncrementalGenerator
 {
 	public void Initialize(IncrementalGeneratorInitializationContext context)
 	{
-		context.RegisterPostInitializationOutput(GeneratePredefined);
-
 		var servers = context.SyntaxProvider
 				.CreateSyntaxProvider(IsServerOrClientCandidate, ExtractServerModel)
 				.Where(model => model is not null);

@@ -11,6 +11,9 @@ internal readonly record struct ClassModel
 	/// <summary>Name of the class.</summary>
 	public required string Name { get; init; }
 
+	/// <summary>Visibility of the class.</summary>
+	public required string Visibility { get; init; }
+
 	/// <summary>RPC methods of the class.</summary>
 	public required EquatableArray<MethodModel> Methods { get; init; }
 }

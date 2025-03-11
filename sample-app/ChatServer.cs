@@ -1,20 +1,18 @@
 using Nickogl.WebSockets.Rpc;
+using Nickogl.WebSockets.Rpc.Serialization;
+using System.Buffers;
 
 namespace SampleApp;
 
-[WebSocketRpcServer<ChatClient>(WebSocketRpcSerializationMode.Specialized)]
+[RpcServer<ChatClient>(RpcParameterSerialization.Specialized)]
 internal sealed partial class ChatServer(IChatServerSerializer serializer, TimeProvider timeProvider)
 {
-	private readonly IChatServerSerializer _serializer = serializer;
-	private readonly TimeProvider _timeProvider = timeProvider;
 	private readonly List<string> _messages = [];
 	private readonly List<ChatClient> _clients = [];
 
-	protected override IChatServerSerializer Serializer => _serializer;
-	protected override TimeProvider? TimeProvider => _timeProvider;
+	protected override IChatServerSerializer Serializer { get; } = serializer;
+	protected override TimeProvider? TimeProvider { get; } = timeProvider;
 	protected override TimeSpan? ClientTimeout => TimeSpan.FromSeconds(5);
-	protected override int MinimumMessageBufferSize => 1024;
-	protected override int MaximumMessageBufferSize => 4096;
 
 	public IReadOnlyCollection<string> Messages => _messages;
 
@@ -27,12 +25,20 @@ internal sealed partial class ChatServer(IChatServerSerializer serializer, TimeP
 			messageSnapshot = [.. _messages];
 		}
 
-		using var batch = new ChatClient.Batch(client);
-		foreach (var message in messageSnapshot)
+		if (messageSnapshot.Count > 0)
 		{
-			batch.PostMessage(message);
+			using var messageWriter = new RpcMessageWriter(new()
+			{
+				Pool = ArrayPool<byte>.Shared,
+				MinimumSize = 1024,
+				MaximumSize = 1024 * 64,
+			});
+			foreach (var message in messageSnapshot)
+			{
+				client.PostMessage(messageWriter, message);
+			}
+			await client.FlushAsync(messageWriter);
 		}
-		await batch.SendAsync(client);
 	}
 
 	protected override ValueTask OnDisconnectedAsync(ChatClient client)
@@ -45,7 +51,7 @@ internal sealed partial class ChatServer(IChatServerSerializer serializer, TimeP
 		return ValueTask.CompletedTask;
 	}
 
-	[WebSocketRpcMethod(1)]
+	[RpcMethod(1)]
 	public async ValueTask PostMessage(ChatClient client, string message)
 	{
 		List<ChatClient> targets;
@@ -55,14 +61,25 @@ internal sealed partial class ChatServer(IChatServerSerializer serializer, TimeP
 			_messages.Add(message);
 		}
 
-		using var batch = new ChatClient.Batch(client);
-		batch.PostMessage(message);
-		try
+		if (targets.Count > 0)
 		{
-			await batch.SendAsync(targets);
-		}
-		catch (Exception)
-		{
+			using var messageWriter = new RpcMessageWriter(new()
+			{
+				Pool = ArrayPool<byte>.Shared,
+				MinimumSize = 1024,
+				MaximumSize = 1024 * 16,
+			});
+			client.PostMessage(messageWriter, message);
+			foreach (var target in targets)
+			{
+				try
+				{
+					await target.FlushAsync(messageWriter);
+				}
+				catch (Exception)
+				{
+				}
+			}
 		}
 	}
 }

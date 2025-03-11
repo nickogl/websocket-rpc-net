@@ -6,20 +6,20 @@ namespace Nickogl.WebSockets.Rpc.Serialization;
 public interface IRpcParameterReader
 {
 	/// <summary>Get a view over the parameter data as a <see cref="ReadOnlySpan{T}"/>.</summary>
-	ReadOnlyMemory<byte> ParameterMemory { get; }
+	ReadOnlyMemory<byte> Memory { get; }
 
 	/// <summary>Get a view over the parameter data as a <see cref="ReadOnlySpan{T}"/>.</summary>
-	ReadOnlySpan<byte> ParameterSpan { get; }
+	ReadOnlySpan<byte> Span { get; }
 
-	/// <summary>Read parameter data using the <see cref="Stream"/> API.</summary>
+	/// <summary>Read parameter data using the <see cref="System.IO.Stream"/> API.</summary>
 	/// <remarks>
 	/// <para>
 	/// The returned stream is neither writable nor seekable.
 	/// </para>
 	/// <para>
-	/// If possible, prefer reading from <see cref="ParameterMemory"/> or
-	/// <see cref="ParameterSpan"/>, as they are allocation-free.
+	/// If possible, prefer reading from <see cref="Memory"/> or
+	/// <see cref="Span"/>, as they are allocation-free.
 	/// </para>
 	/// </remarks>
-	Stream ParameterStream { get; }
+	Stream Stream { get; }
 }

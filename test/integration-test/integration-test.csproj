@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\websocket-rpc-net\websocket-rpc-net.csproj" />
+    <ProjectReference Include="..\..\src\websocket-rpc-net-generator\websocket-rpc-net-generator.csproj" />
     <ProjectReference Include="..\..\sample-app\sample-app.csproj" />
   </ItemGroup>
 

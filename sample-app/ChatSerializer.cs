@@ -1,18 +1,18 @@
-using Nickogl.WebSockets.Rpc;
+using Nickogl.WebSockets.Rpc.Serialization;
 using System.Text;
 
 namespace SampleApp;
 
-public class ChatSerializer : IChatServerSerializer, IChatClientSerializer
+internal class ChatSerializer : IChatServerSerializer, IChatClientSerializer
 {
-	public string DeserializeString(IParameterReader reader)
+	public string DeserializeString(IRpcParameterReader reader)
 	{
 		return Encoding.UTF8.GetString(reader.Span);
 	}
 
-	public void SerializeString(IParameterWriter writer, string parameter)
+	public void SerializeString(IRpcParameterWriter writer, string parameter)
 	{
 		var destination = writer.GetSpan(Encoding.UTF8.GetByteCount(parameter));
-		Encoding.UTF8.GetBytes(parameter, destination);
+		writer.Advance(Encoding.UTF8.GetBytes(parameter, destination));
 	}
 }

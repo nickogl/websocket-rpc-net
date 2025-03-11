@@ -42,19 +42,19 @@ internal sealed class RpcServer : RpcServerBase<RpcClient>, IDisposable
 		if (methodKey == 1)
 		{
 			messageReader.BeginReadParameter();
-			_receivedTexts.Add(Encoding.UTF8.GetString(messageReader.ParameterReader.ParameterSpan));
+			_receivedTexts.Add(Encoding.UTF8.GetString(messageReader.ParameterReader.Span));
 			messageReader.EndReadParameter();
 		}
 		else if (methodKey == 2)
 		{
 			messageReader.BeginReadParameter();
-			int x = BinaryPrimitives.ReadInt32LittleEndian(messageReader.ParameterReader.ParameterSpan);
+			int x = BinaryPrimitives.ReadInt32LittleEndian(messageReader.ParameterReader.Span);
 			messageReader.EndReadParameter();
 			messageReader.BeginReadParameter();
-			int y = BinaryPrimitives.ReadInt32LittleEndian(messageReader.ParameterReader.ParameterSpan);
+			int y = BinaryPrimitives.ReadInt32LittleEndian(messageReader.ParameterReader.Span);
 			messageReader.EndReadParameter();
 			messageReader.BeginReadParameter();
-			int z = BinaryPrimitives.ReadInt32LittleEndian(messageReader.ParameterReader.ParameterSpan);
+			int z = BinaryPrimitives.ReadInt32LittleEndian(messageReader.ParameterReader.Span);
 			messageReader.EndReadParameter();
 			_receivedCoordinates.Add((x, y, z));
 		}

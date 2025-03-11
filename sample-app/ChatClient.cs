@@ -1,15 +1,26 @@
 using Nickogl.WebSockets.Rpc;
+using System.Diagnostics;
+using System.Net.WebSockets;
 
 namespace SampleApp;
 
-[WebSocketRpcClient(WebSocketRpcSerializationMode.Specialized)]
-internal sealed partial class ChatClient
+[RpcClient(RpcParameterSerialization.Specialized)]
+internal sealed partial class ChatClient(IChatClientSerializer serializer)
 {
-	public ChatClient(IChatClientSerializer serializer)
+	private WebSocket? _webSocket;
+
+	public override WebSocket WebSocket
 	{
-		_serializer = serializer;
+		get { Debug.Assert(_webSocket != null); return _webSocket; }
 	}
 
-	[WebSocketRpcMethod(1)]
+	public void SetWebSocket(WebSocket webSocket)
+	{
+		_webSocket = webSocket;
+	}
+
+	protected override IChatClientSerializer Serializer { get; } = serializer;
+
+	[RpcMethod(1)]
 	public partial ValueTask PostMessage(string message);
 }

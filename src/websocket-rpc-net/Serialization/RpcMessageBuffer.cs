@@ -16,7 +16,7 @@ public struct RpcMessageBuffer(RpcMessageBufferOptions options) : IDisposable
 	{
 		get
 		{
-			Debug.Assert(_buffer is not null, "EnsureBuffer() was never called");
+			Debug.Assert(_buffer is not null, "EnsureAtLeast() was never called");
 			return _buffer.AsMemory();
 		}
 	}
@@ -26,7 +26,7 @@ public struct RpcMessageBuffer(RpcMessageBufferOptions options) : IDisposable
 	{
 		get
 		{
-			Debug.Assert(_buffer is not null, "EnsureBuffer() was never called");
+			Debug.Assert(_buffer is not null, "EnsureAtLeast() was never called");
 			return _buffer.AsSpan();
 		}
 	}
@@ -36,7 +36,7 @@ public struct RpcMessageBuffer(RpcMessageBufferOptions options) : IDisposable
 	{
 		get
 		{
-			Debug.Assert(_buffer is not null, "EnsureBuffer() was never called");
+			Debug.Assert(_buffer is not null, "EnsureAtLeast() was never called");
 			return _consumed;
 		}
 	}
@@ -111,7 +111,7 @@ public struct RpcMessageBuffer(RpcMessageBufferOptions options) : IDisposable
 	public void Consume(int count)
 	{
 		Debug.Assert(count > 0, "Size must be at least one byte");
-		Debug.Assert(_buffer is not null, "EnsureBuffer() was never called");
+		Debug.Assert(_buffer is not null, "EnsureAtLeast() was never called");
 		Debug.Assert(_consumed + count <= _buffer.Length, "Cannot advance buffer beyond its capacity");
 
 		_consumed += count;

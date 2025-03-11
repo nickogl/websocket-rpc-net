@@ -41,7 +41,7 @@ public sealed class RpcMessageReader(RpcMessageBufferOptions bufferOptions) : IR
 	}
 
 	/// <inheritdoc/>
-	public ReadOnlyMemory<byte> ParameterMemory
+	public ReadOnlyMemory<byte> Memory
 	{
 		get
 		{
@@ -51,7 +51,7 @@ public sealed class RpcMessageReader(RpcMessageBufferOptions bufferOptions) : IR
 	}
 
 	/// <inheritdoc/>
-	public ReadOnlySpan<byte> ParameterSpan
+	public ReadOnlySpan<byte> Span
 	{
 		get
 		{
@@ -61,7 +61,7 @@ public sealed class RpcMessageReader(RpcMessageBufferOptions bufferOptions) : IR
 	}
 
 	/// <inheritdoc/>
-	public Stream ParameterStream
+	public Stream Stream
 	{
 		get
 		{
@@ -219,9 +219,9 @@ public sealed class RpcMessageReader(RpcMessageBufferOptions bufferOptions) : IR
 				return 0;
 			}
 
-			int maxAvailable = _reader.ParameterSpan.Length - _position;
+			int maxAvailable = _reader.Span.Length - _position;
 			int readCount = Math.Min(buffer.Length, maxAvailable);
-			_reader.ParameterSpan.Slice(_position, readCount).CopyTo(buffer);
+			_reader.Span.Slice(_position, readCount).CopyTo(buffer);
 
 			_position += readCount;
 

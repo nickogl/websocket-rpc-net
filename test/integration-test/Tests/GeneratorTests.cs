@@ -12,7 +12,7 @@ public class GeneratorTests(ITestOutputHelper output)
 	[Fact]
 	public void GeneratesSources()
 	{
-		var generator = new WebSocketRpcGenerator();
+		var generator = new RpcServerGenerator();
 		var compilation =
 			CSharpCompilation
 				.Create(nameof(GeneratesSources))
@@ -33,22 +33,15 @@ public class GeneratorTests(ITestOutputHelper output)
 		}
 
 		Assert.Single(result.Results);
-		Assert.Equal(result.Results[0].GeneratedSources.Select(source => source.HintName).OrderBy(name => name),
-			[
-				"ChatClient.g.cs",
-				"ChatServer.g.cs",
-				"ChatTestClient.g.cs",
-				"IChatClientSerializer.g.cs",
-				"IChatClientTestSerializer.g.cs",
-				"IChatServerSerializer.g.cs",
-				"IChatServerTestSerializer.g.cs",
-				"RpcArgMatcher.g.cs",
-				"WebSocketRpcBuffer.g.cs",
-				"WebSocketRpcClientAttribute.g.cs",
-				"WebSocketRpcMethodAttribute.g.cs",
-				"WebSocketRpcSerializationMode.g.cs",
-				"WebSocketRpcServerAttribute.g.cs",
-				"WebSocketRpcTestClientAttribute.g.cs",
-			]);
+		Assert.Equal(
+		[
+			"ChatClient.g.cs",
+			"ChatServer.g.cs",
+			"ChatTestClient.g.cs",
+			"IChatClientSerializer.g.cs",
+			"IChatClientTestSerializer.g.cs",
+			"IChatServerSerializer.g.cs",
+			"IChatServerTestSerializer.g.cs",
+		], result.Results[0].GeneratedSources.Select(source => source.HintName).ToHashSet());
 	}
 }

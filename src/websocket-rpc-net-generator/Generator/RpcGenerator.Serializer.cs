@@ -4,12 +4,12 @@ using System.Text;
 
 namespace Nickogl.WebSockets.Rpc.Generator;
 
-public partial class WebSocketRpcGenerator
+public partial class RpcServerGenerator
 {
 	private static void GenerateSerializerInterface(SourceProductionContext context, SerializerModel serializerModel)
 	{
 		var serializerInterface = new StringBuilder(@$"
-using Nickogl.WebSockets.Rpc;
+using Nickogl.WebSockets.Rpc.Serialization;
 
 namespace {serializerModel.InterfaceNamespace};
 
@@ -18,7 +18,7 @@ namespace {serializerModel.InterfaceNamespace};
 /// You need to implement this interface and provide an instance of that class
 /// to the generated code by implementing the corresponding partial method.
 /// </summary>
-internal interface {serializerModel.InterfaceName}
+{serializerModel.InterfaceVisiblity} interface {serializerModel.InterfaceName}
 {{");
 		if (serializerModel.IsGeneric)
 		{
@@ -26,10 +26,10 @@ internal interface {serializerModel.InterfaceName}
 			{
 				serializerInterface.AppendLine(@$"
 	/// <summary>
-	/// Deserialize an RPC parameter of type <typeparamref name=""T""/> from <paramref name=""data""/>.
+	/// Deserialize an RPC parameter of type <typeparamref name=""T""/>.
 	/// </summary>
-	/// <param name=""reader"">Reader to read parameter data using either the <see cref=""System.IO.Stream""/> or the <see cref=""System.ReadOnlySpan{{byte}}""/> API.</param>
-	T Deserialize<T>(IParameterReader reader);");
+	/// <param name=""reader"">Reader to read parameter data from the raw bytes or the <see cref=""System.IO.Stream""/> API.</param>
+	T Deserialize<T>(IRpcParameterReader reader);");
 			}
 			if (serializerModel.SupportsSerialization)
 			{
@@ -37,9 +37,9 @@ internal interface {serializerModel.InterfaceName}
 	/// <summary>
 	/// Serialize an RPC parameter of type <typeparamref name=""T""/>.
 	/// </summary>
-	/// <param name=""writer"">Writer to write parameter data using either the <see cref=""System.IO.Stream""/> or the <see cref=""System.Buffers.IBufferWriter""/> API.</param>
-	/// <param name=""parameter"">Parameter to serialize to raw data using the <paramref name=""writer""/>.</param>
-	void Serialize<T>(IParameterWriter writer, T parameter);");
+	/// <param name=""writer"">Writer to write parameter data using either the <see cref=""System.Buffers.IBufferWriter""/> or the <see cref=""System.IO.Stream""/> API.</param>
+	/// <param name=""parameter"">Parameter to serialize using the provided <paramref name=""writer""/>.</param>
+	void Serialize<T>(IRpcParameterWriter writer, T parameter);");
 			}
 		}
 		else
@@ -53,8 +53,8 @@ internal interface {serializerModel.InterfaceName}
 	/// <summary>
 	/// Deserialize an RPC parameter of type <see cref=""{xmlEscapedType}""/>.
 	/// </summary>
-	/// <param name=""reader"">Reader to read parameter data using either the <see cref=""System.IO.Stream""/> or the <see cref=""System.ReadOnlySpan{{byte}}""/> API.</param>
-	{type.Name} Deserialize{type.EscapedName}(IParameterReader reader);");
+	/// <param name=""reader"">Reader to read parameter data from the raw bytes or the <see cref=""System.IO.Stream""/> API.</param>
+	{type.Name} Deserialize{type.EscapedName}(IRpcParameterReader reader);");
 				}
 				if (serializerModel.SupportsSerialization)
 				{
@@ -62,9 +62,9 @@ internal interface {serializerModel.InterfaceName}
 	/// <summary>
 	/// Serialize an RPC parameter of type <see cref=""{xmlEscapedType}""/>.
 	/// </summary>
-	/// <param name=""writer"">Writer to write parameter data using either the <see cref=""System.IO.Stream""/> or the <see cref=""System.Buffers.IBufferWriter""/> API.</param>
-	/// <param name=""parameter"">Parameter to serialize to raw data using the <paramref name=""writer""/>.</param>
-	void Serialize{type.EscapedName}(IParameterWriter writer, {type.Name} parameter);");
+	/// <param name=""writer"">Writer to write parameter data using either the <see cref=""System.Buffers.IBufferWriter""/> or the <see cref=""System.IO.Stream""/> API.</param>
+	/// <param name=""parameter"">Parameter to serialize using the provided <paramref name=""writer""/>.</param>
+	void Serialize{type.EscapedName}(IRpcParameterWriter writer, {type.Name} parameter);");
 				}
 			}
 		}

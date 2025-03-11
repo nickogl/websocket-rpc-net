@@ -114,7 +114,7 @@ public class RpcMessageReaderTests : IDisposable
 		reader.BeginReadParameter();
 
 		ReadOnlySpan<byte> expected = [0xe8, 0xc2];
-		Assert.Equal(expected, reader.ParameterReader.ParameterSpan);
+		Assert.Equal(expected, reader.ParameterReader.Span);
 	}
 
 	[Fact]
@@ -131,24 +131,24 @@ public class RpcMessageReaderTests : IDisposable
 		reader.ReadMethodKey();
 		reader.BeginReadParameter();
 
-		Assert.Equal(0, reader.ParameterReader.ParameterStream.Position);
-		Assert.Equal(2, reader.ParameterReader.ParameterStream.Length);
+		Assert.Equal(0, reader.ParameterReader.Stream.Position);
+		Assert.Equal(2, reader.ParameterReader.Stream.Length);
 
 		var buffer = new byte[] { 0x0, 0x0, 0x0 };
-		reader.ParameterReader.ParameterStream.ReadExactly(buffer, 0, 1);
+		reader.ParameterReader.Stream.ReadExactly(buffer, 0, 1);
 		Assert.Equal(0xe8, buffer[0]);
 		Assert.Equal(0x0, buffer[1]);
 		Assert.Equal(0x0, buffer[2]);
 
-		reader.ParameterReader.ParameterStream.ReadExactly(buffer, 1, 1);
+		reader.ParameterReader.Stream.ReadExactly(buffer, 1, 1);
 		Assert.Equal(0xe8, buffer[0]);
 		Assert.Equal(0xc2, buffer[1]);
 		Assert.Equal(0x0, buffer[2]);
 
-		Assert.Equal(reader.ParameterReader.ParameterStream.Length, reader.ParameterReader.ParameterStream.Position);
+		Assert.Equal(reader.ParameterReader.Stream.Length, reader.ParameterReader.Stream.Position);
 		Assert.Throws<EndOfStreamException>(() =>
 		{
-			reader.ParameterReader.ParameterStream.ReadExactly(buffer, 2, 1);
+			reader.ParameterReader.Stream.ReadExactly(buffer, 2, 1);
 		});
 
 		reader.EndReadParameter();
@@ -172,12 +172,12 @@ public class RpcMessageReaderTests : IDisposable
 
 		reader.BeginReadParameter();
 		ReadOnlySpan<byte> expected = [0x1];
-		Assert.Equal(expected, reader.ParameterReader.ParameterSpan);
+		Assert.Equal(expected, reader.ParameterReader.Span);
 		reader.EndReadParameter();
 
 		reader.BeginReadParameter();
 		expected = [0x2];
-		Assert.Equal(expected, reader.ParameterReader.ParameterSpan);
+		Assert.Equal(expected, reader.ParameterReader.Span);
 		reader.EndReadParameter();
 
 		Assert.True(reader.EndOfMessage);
@@ -200,13 +200,13 @@ public class RpcMessageReaderTests : IDisposable
 		Assert.Equal(1, reader.ReadMethodKey());
 		reader.BeginReadParameter();
 		ReadOnlySpan<byte> expectedParameterData = [0x1];
-		Assert.Equal(expectedParameterData, reader.ParameterReader.ParameterSpan);
+		Assert.Equal(expectedParameterData, reader.ParameterReader.Span);
 		reader.EndReadParameter();
 
 		Assert.Equal(256, reader.ReadMethodKey());
 		reader.BeginReadParameter();
 		expectedParameterData = [0x2, 0x3];
-		Assert.Equal(expectedParameterData, reader.ParameterReader.ParameterSpan);
+		Assert.Equal(expectedParameterData, reader.ParameterReader.Span);
 		reader.EndReadParameter();
 
 		Assert.True(reader.EndOfMessage);
@@ -237,16 +237,16 @@ public class RpcMessageReaderTests : IDisposable
 			Assert.Equal(1, reader.ReadMethodKey());
 			reader.BeginReadParameter();
 			var buffer = new byte[1];
-			reader.ParameterReader.ParameterStream.ReadExactly(buffer);
+			reader.ParameterReader.Stream.ReadExactly(buffer);
 			Assert.Equal(1, buffer[0]);
 			reader.EndReadParameter();
 			reader.BeginReadParameter();
-			reader.ParameterReader.ParameterStream.ReadExactly(buffer);
+			reader.ParameterReader.Stream.ReadExactly(buffer);
 			Assert.Equal(2, buffer[0]);
 			reader.EndReadParameter();
 			Assert.Equal(2, reader.ReadMethodKey());
 			reader.BeginReadParameter();
-			reader.ParameterReader.ParameterStream.ReadExactly(buffer);
+			reader.ParameterReader.Stream.ReadExactly(buffer);
 			Assert.Equal(3, buffer[0]);
 			reader.EndReadParameter();
 		}

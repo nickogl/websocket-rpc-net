@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Time.Testing;
 using Nickogl.AspNetCore.IntegrationTesting;
+using Nickogl.WebSockets.Rpc.Testing;
 using SampleApp;
 
 namespace Nickogl.WebSockets.Rpc.IntegrationTest.Tests;
@@ -47,8 +48,8 @@ public class SampleAppTests()
 		await using var client1 = new ChatTestClient(app.BaseAddress);
 		await client1.PostMessage("Message 1");
 		await client1.PostMessage("Message 2");
-		await client1.Received.PostMessage(RpcArg.Any<string>());
-		await client1.Received.PostMessage(RpcArg.Any<string>());
+		await client1.Received.PostMessage(RpcParameter.Any<string>());
+		await client1.Received.PostMessage(RpcParameter.Any<string>());
 
 		await using var client2 = new ChatTestClient(app.BaseAddress);
 

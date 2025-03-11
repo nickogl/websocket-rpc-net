@@ -59,7 +59,7 @@ public class RpcMessageWriterTests : IDisposable
 
 		writer.WriteMethodKey(1);
 		writer.BeginWriteParameter();
-		writer.ParameterWriter.ParameterStream.WriteByte(2);
+		writer.ParameterWriter.Stream.WriteByte(2);
 		writer.EndWriteParameter();
 
 		ReadOnlySpan<byte> expected = [0x1, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x2];
@@ -73,10 +73,10 @@ public class RpcMessageWriterTests : IDisposable
 
 		writer.WriteMethodKey(1);
 		writer.BeginWriteParameter();
-		writer.ParameterWriter.ParameterStream.WriteByte(2);
+		writer.ParameterWriter.Stream.WriteByte(2);
 		writer.EndWriteParameter();
 		writer.BeginWriteParameter();
-		writer.ParameterWriter.ParameterStream.Write([0x3, 0x4]);
+		writer.ParameterWriter.Stream.Write([0x3, 0x4]);
 		writer.EndWriteParameter();
 
 		ReadOnlySpan<byte> expected = [0x1, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x2, 0x2, 0x0, 0x0, 0x0, 0x3, 0x4];
@@ -90,11 +90,11 @@ public class RpcMessageWriterTests : IDisposable
 
 		writer.WriteMethodKey(1);
 		writer.BeginWriteParameter();
-		writer.ParameterWriter.ParameterStream.WriteByte(2);
+		writer.ParameterWriter.Stream.WriteByte(2);
 		writer.EndWriteParameter();
 		writer.WriteMethodKey(2);
 		writer.BeginWriteParameter();
-		writer.ParameterWriter.ParameterStream.WriteByte(1);
+		writer.ParameterWriter.Stream.WriteByte(1);
 		writer.EndWriteParameter();
 
 		ReadOnlySpan<byte> expected = [0x1, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x2, 0x2, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x1];

@@ -34,7 +34,7 @@ public sealed class RpcMessageWriter(RpcMessageBufferOptions bufferOptions) : IR
 	}
 
 	/// <inheritdoc/>
-	public Stream ParameterStream
+	public Stream Stream
 	{
 		get
 		{

@@ -7,7 +7,7 @@ namespace Nickogl.WebSockets.Rpc.Serialization;
 /// </summary>
 public interface IRpcParameterWriter : IBufferWriter<byte>
 {
-	/// <summary>Write parameter data using the <see cref="Stream"/> API.</summary>
+	/// <summary>Write parameter data using the <see cref="System.IO.Stream"/> API.</summary>
 	/// <remarks>
 	/// <para>
 	/// The returned stream is neither readable nor seekable.
@@ -17,5 +17,5 @@ public interface IRpcParameterWriter : IBufferWriter<byte>
 	/// reduces allocations to a minimum.
 	/// </para>
 	/// </remarks>
-	Stream ParameterStream { get; }
+	Stream Stream { get; }
 }

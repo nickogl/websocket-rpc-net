@@ -1,18 +1,17 @@
 <html>
   <head>
-    <script src="./chatClientSerializerBase.js"></script>
-    <script src="./chatClientBase.js"></script>
-    <script src="./chatClient.js"></script>
-    <script>
-      var chatClient;
+    <script type="module">
+      import { ChatClient } from './chatClient.js';
 
-      var connect = function() {
+      let chatClient;
+
+      window.connect = function() {
         var url = document.getElementById("url").value;
         chatClient = new ChatClient(url);
         chatClient.connect();
       }
 
-      var send = function() {
+      window.send = function() {
         var message = document.getElementById("message").value;
         chatClient.postMessage(message);
       }

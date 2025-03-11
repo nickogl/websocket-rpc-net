@@ -398,3 +398,6 @@ FodyWeavers.xsd
 *.sln.iml
 
 launchSettings.json
+
+sample-app/browser/generated
+sample-app/browser/node_modules

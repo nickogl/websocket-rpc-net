@@ -54,6 +54,11 @@ internal sealed partial class ChatServer(IChatServerSerializer serializer, TimeP
 	[RpcMethod(1)]
 	public async ValueTask PostMessage(ChatClient client, string message)
 	{
+		if (string.IsNullOrEmpty(message))
+		{
+			return;
+		}
+
 		List<ChatClient> targets;
 		lock (_clients)
 		{

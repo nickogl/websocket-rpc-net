@@ -1,6 +1,7 @@
 ﻿using Basic.Reference.Assemblies;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Nickogl.WebSockets.Rpc;
 using Nickogl.WebSockets.Rpc.Generator;
 using System.CommandLine;
 using System.Text;
@@ -17,7 +18,8 @@ root.SetHandler((source, output) =>
 			.Create("client")
 			.WithOptions(new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary))
 			.AddSyntaxTrees(sourceFiles.Select(file => CSharpSyntaxTree.ParseText(File.ReadAllText(file.FullName))))
-			.AddReferences(ReferenceAssemblies.NetStandard20);
+			.AddReferences(ReferenceAssemblies.NetStandard20)
+			.AddReferences(MetadataReference.CreateFromFile(typeof(RpcServerAttribute<>).Assembly.Location));
 	var driver =
 		CSharpGeneratorDriver
 			.Create(generator)

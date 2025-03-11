@@ -23,8 +23,10 @@ app.Use(async (context, next) =>
 		var client = app.Services.GetRequiredService<ChatClient>();
 		client.SetWebSocket(webSocket);
 
+		var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+		using var cts = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted, lifetime.ApplicationStopping);
 		var server = app.Services.GetRequiredService<ChatServer>();
-		await server.ProcessAsync(client, context.RequestAborted);
+		await server.ProcessAsync(client, cts.Token);
 	}
 	else
 	{

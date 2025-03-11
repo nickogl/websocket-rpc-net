@@ -9,6 +9,8 @@ public sealed class RpcClientGenerator : IIncrementalGenerator
 {
 	public void Initialize(IncrementalGeneratorInitializationContext context)
 	{
+		context.RegisterPostInitializationOutput(GenerateUtilities);
+
 		var servers = context.SyntaxProvider
 				.CreateSyntaxProvider(RpcServerGenerator.IsServerOrClientCandidate, RpcServerGenerator.ExtractServerModel)
 				.Where(model => model is not null);
@@ -32,6 +34,86 @@ public sealed class RpcClientGenerator : IIncrementalGenerator
 				});
 	}
 
+	private void GenerateUtilities(IncrementalGeneratorPostInitializationContext context)
+	{
+		context.AddSource("rpcMessageWriter.js", @$"
+export class RpcMessageWriter
+{{
+	_buffer;
+	_dataView;
+	_typedArray;
+	_written;
+
+	/**
+	 * Create a new RPC message writer.
+	 *
+	 * @param {{number | undefined}} initialBufferSize Initial size of the message buffer. Grows expontentially as needed.
+	 */
+	constructor(initialBufferSize) {{
+		this._buffer = new ArrayBuffer(initialBufferSize || 4096);
+		this._dataView = new DataView(this._buffer);
+		this._typedArray = new Uint8Array(this._buffer);
+		this._written = 0;
+	}}
+
+	/**
+	 * Get the written data thus far.
+	 *
+	 * @returns {{Uint8Array}}
+	 */
+	get data() {{
+		return new Uint8Array(this._buffer, 0, this._written);
+	}}
+
+	/**
+	 * Reset this instance for subsequent use. Keeps the allocated buffer.
+	 */
+	reset() {{
+		this._written = 0;
+	}}
+
+	/**
+	 * Write an RPC method key.
+	 *
+	 * @param {{number}} key Key of the method to call on the server.
+	 */
+	writeMethodKey(key) {{
+		this._ensureAtLeast(4);
+		this._dataView.setInt32(this._written, key, true);
+		this._written += 4;
+	}}
+
+	/**
+	 * Write RPC parameter data.
+	 *
+	 * @param {{Uint8Array}} data Raw data of the parameter.
+	 */
+	writeParameter(data) {{
+		this._ensureAtLeast(data.byteLength + 4);
+		this._dataView.setInt32(this._written, data.byteLength, true);
+		this._written += 4;
+		this._typedArray.set(data, this._written);
+		this._written += data.byteLength;
+	}}
+
+	_ensureAtLeast(size) {{
+		const requiredSize = this._written + size;
+		if (requiredSize > this._buffer.byteLength) {{
+			let newSize = this._buffer.byteLength;
+			while (newSize < requiredSize) {{
+				newSize *= 2;
+			}}
+
+			const newBuffer = new ArrayBuffer(newSize);
+			this._dataView = new DataView(newBuffer);
+			this._typedArray = new Uint8Array(newBuffer);
+			this._typedArray.set(this.data, 0);
+			this._buffer = newBuffer;
+		}}
+	}}
+}}");
+	}
+
 	private void GenerateClientClass(SourceProductionContext context, ServerModel serverModel, ClientModel clientModel)
 	{
 		//
@@ -40,7 +122,7 @@ public sealed class RpcClientGenerator : IIncrementalGenerator
 		if (serverModel.Serializer != null || clientModel.Serializer != null)
 		{
 			var serializerClass = new StringBuilder(@$"
-class {clientModel.Class.Name}SerializerBase
+export class {clientModel.Class.Name}SerializerBase
 {{
 	constructor() {{
 		if (this.constructor == {clientModel.Class.Name}SerializerBase) {{
@@ -70,7 +152,7 @@ class {clientModel.Class.Name}SerializerBase
 						var methodName = $"deserialize{type.EscapedName}";
 						serializerClass.AppendLine(@$"
 	/**
-	 * Deserialize data into the equivalent of the .NET type '{type}' on the server.
+	 * Deserialize data into the equivalent of the .NET type '{type.Name}' on the server.
 	 *
 	 * @abstract
 	 * @param {{Uint8Array}} data Raw data to deserialize
@@ -103,7 +185,7 @@ class {clientModel.Class.Name}SerializerBase
 						var methodName = $"serialize{type.EscapedName}";
 						serializerClass.AppendLine(@$"
 	/**
-	 * Serialize data into the equivalent of the .NET type '{type}' on the server.
+	 * Serialize data into the equivalent of the .NET type '{type.Name}' on the server.
 	 *
 	 * @abstract
 	 * @param {{any}} obj Object to serialize
@@ -125,7 +207,9 @@ class {clientModel.Class.Name}SerializerBase
  * @typedef {{import('./{char.ToLower(clientModel.Class.Name[0]) + clientModel.Class.Name.Substring(1)}SerializerBase.js').{clientModel.Class.Name}SerializerBase}} {clientModel.Class.Name}SerializerBase
  */
 
-class {clientModel.Class.Name}Base
+import {{ RpcMessageWriter }} from './rpcMessageWriter.js';
+
+export class {clientModel.Class.Name}Base
 {{
 	/**
 	 * Interval in which to ping the websocket-rpc server. This value should be
@@ -153,22 +237,25 @@ class {clientModel.Class.Name}Base
 	webSocket;
 
 	/** @type {{string}} */
-	#url;
+	_url;
 
 	/** @type {{number | undefined}} */
-	#pingTaskId;
+	_pingTaskId;
 
 	/** @type {{null | () => void}} */
-	#resolveConnectPromise;
+	_resolveConnectPromise;
 
 	/** @type {{number | undefined}} */
-	#awaitConnectionTaskId;
+	_awaitConnectionTaskId;
+
+	/** @type {{RpcMessageWriter}} */
+	_messageWriter;
 ");
 		if (clientModel.Serializer != null || serverModel.Serializer != null)
 		{
 			clientClass.Append(@$"
 	/** @type {{{clientModel.Class.Name}SerializerBase}} */
-	#serializer;
+	_serializer;
 	");
 		}
 		clientClass.Append(@$"
@@ -176,9 +263,10 @@ class {clientModel.Class.Name}Base
 	 * Create a new client for a websocket-rpc server.
 	 *
 	 * @param {{string}} url URL of the websocket-rpc server to connect to later.
-	 * @param {{{clientModel.Class.Name}SerializerBase | undefined }} serializer Serializer to serialize and deserialize RPC parameters, if needed
+	 * @param {{{clientModel.Class.Name}SerializerBase | undefined }} serializer Serializer to serialize and deserialize RPC parameters, if needed.
+	 * @param {{RpcMessageWriter}} messageWriter Message writer to use. If not provided, creates a new one for every message.
 	 */
-	constructor(url, serializer) {{
+	constructor(url, serializer, messageWriter) {{
 		if (this.constructor == {clientModel.Class.Name}Base) {{
 			throw new Error('Must not instantiate abstract class ""{clientModel.Class.Name}Base""');
 		}}
@@ -189,14 +277,15 @@ class {clientModel.Class.Name}Base
 		if (serializer == null) {{
 			throw new Error('Must provide a serializer since there are RPC parameters');
 		}}
-		this.#serializer = serializer;");
+		this._serializer = serializer;");
 		}
 		clientClass.Append(@$"
 		this.pingIntervalMs = null;
 		this.connectionTimeoutMs = 5000;
 		this.webSocket = null;
-		this.#url = url;
-		this.#resolveConnectPromise = null;
+		this._url = url;
+		this._resolveConnectPromise = null;
+		this._messageWriter = messageWriter;
 	}}
 
 	/**
@@ -212,18 +301,18 @@ class {clientModel.Class.Name}Base
 			}}
 
 			try {{
-				this.#resolveConnectPromise = () => {{
-					this.#awaitConnectionTaskId = null;
-					this.#resolveConnectPromise = null;
+				this._resolveConnectPromise = () => {{
+					this._awaitConnectionTaskId = null;
+					this._resolveConnectPromise = null;
 					resolve();
 				}};
 
-				this.webSocket = new WebSocket(this.#url);
+				this.webSocket = new WebSocket(this._url);
 				this.webSocket.binaryType = 'arraybuffer';
 				this.webSocket.onopen = () => {{
 					this.webSocket.onerror = () => this.onError();
-					this.#awaitConnectionTaskId = setTimeout(() => {{
-						if (this.#resolveConnectPromise !== null) {{
+					this._awaitConnectionTaskId = setTimeout(() => {{
+						if (this._resolveConnectPromise !== null) {{
 							reject(new Error('Unable to connect'));
 						}}
 					}}, this.connectionTimeoutMs);
@@ -233,13 +322,13 @@ class {clientModel.Class.Name}Base
 					this.onError(); reject(new Error('Unable to connect'));
 				}};
 				this.webSocket.onclose = () => {{
-					if (this.#awaitConnectionTaskId === null) {{
+					if (this._awaitConnectionTaskId === null) {{
 						this.onDisconnected();
 					}}
 				}}
 			}} catch (e) {{
-				clearTimeout(this.#awaitConnectionTaskId);
-				clearInterval(this.#pingTaskId);
+				clearTimeout(this._awaitConnectionTaskId);
+				clearInterval(this._pingTaskId);
 				this.webSocket = null;
 				reject(e);
 			}}
@@ -269,13 +358,13 @@ class {clientModel.Class.Name}Base
 
 	onConnected() {{
 		if (this.pingIntervalMs !== null) {{
-			clearInterval(this.#pingTaskId);
-			this.#pingTaskId = setInterval(() => this.__ping(), this.pingIntervalMs);
+			clearInterval(this._pingTaskId);
+			this._pingTaskId = setInterval(() => this.__ping(), this.pingIntervalMs);
 		}}
 	}}
 
 	onDisconnected() {{
-		clearInterval(this.#pingTaskId);
+		clearInterval(this._pingTaskId);
 		this.webSocket = null;
 	}}
 
@@ -297,7 +386,7 @@ class {clientModel.Class.Name}Base
 			foreach (var param in method.Parameters)
 			{
 				clientClass.Append(@$"
-	 * @param {param.Name} Parameter of .NET type '{param.Type}' on the server");
+	 * @param {param.Name} Parameter of .NET type '{param.Type.Name}' on the server");
 			}
 			clientClass.AppendLine(@$"
 	 */
@@ -317,27 +406,24 @@ class {clientModel.Class.Name}Base
 			foreach (var param in method.Parameters)
 			{
 				clientClass.Append(@$"
-	 * @param {param.Name} Parameter of .NET type '{param.Type}' on the server");
+	 * @param {param.Name} Parameter of .NET type '{param.Type.Name}' on the server");
 			}
-			clientClass.AppendLine(@$"
+			clientClass.Append(@$"
 	 */
 	{name}({RpcServerGenerator.GetParameterList(method.Parameters, types: false)}) {{
-		var __data = new Uint8Array(4);
-		const __view = new DataView(__data.buffer);
-		__view.setInt32(0, {method.Key}, true);
-		this.webSocket.send(__data);");
+		var __writer = this._messageWriter || new RpcMessageWriter();
+		__writer.writeMethodKey({method.Key});");
 			foreach (var param in method.Parameters)
 			{
 				var serializeCall = serverModel.Serializer!.Value.IsGeneric
-					? $"serialize(\"{param.Type}\", {param.Name})"
+					? $"serialize(\"{param.Type.Name}\", {param.Name})"
 					: $"serialize{param.Type.EscapedName}({param.Name})";
 				clientClass.Append(@$"
-		const __{param.Name}__ = this.#serializer.{serializeCall};
-		__view.setInt32(0, __{param.Name}__.byteLength, true);
-		this.webSocket.send(__data);
-		this.webSocket.send(__{param.Name}__);");
+		__writer.writeParameter(this._serializer.{serializeCall});");
 			}
 			clientClass.AppendLine(@$"
+		this.webSocket.send(__writer.data);
+		__writer.reset();
 	}}");
 		}
 		clientClass.Append(@$"
@@ -359,9 +445,9 @@ class {clientModel.Class.Name}Base
 				__currentOffset += 4;
 				switch (__methodKey) {{
 					case 0:
-						if (this.#resolveConnectPromise !== null) {{
+						if (this._resolveConnectPromise !== null) {{
 	 						this.onConnected();
-							this.#resolveConnectPromise();
+							this._resolveConnectPromise();
 							break;
 						}}");
 		foreach (var method in clientModel.Class.Methods)
@@ -371,12 +457,12 @@ class {clientModel.Class.Name}Base
 			foreach (var param in method.Parameters)
 			{
 				var deserializeCall = clientModel.Serializer!.Value.IsGeneric
-					? $"deserialize(\"{param.Type}\", new Uint8Array(__event.data, __currentOffset, __{param.Name}Length__))"
+					? $"deserialize(\"{param.Type.Name}\", new Uint8Array(__event.data, __currentOffset, __{param.Name}Length__))"
 					: $"deserialize{param.Type.EscapedName}(new Uint8Array(__event.data, __currentOffset, __{param.Name}Length__))";
 				clientClass.Append(@$"
 						var __{param.Name}Length__ = __dataView.getUint32(__currentOffset, true);
 						__currentOffset += 4;
-						var {param.Name} = this.#serializer.{deserializeCall};
+						var {param.Name} = this._serializer.{deserializeCall};
 						__currentOffset += __{param.Name}Length__;");
 			}
 			clientClass.Append(@$"

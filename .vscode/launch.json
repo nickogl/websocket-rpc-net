@@ -12,6 +12,24 @@
       "env": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       },
+    },
+    {
+      "name": "Generate browser client",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/src/websocket-rpc-net-client/bin/Debug/net8.0/websocket-rpc-net-client.dll",
+      "args": [
+        "--source",
+        "${workspaceFolder}/sample-app",
+        "--output",
+        "${workspaceFolder}/sample-app/browser/generated"
+      ],
+      "cwd": "${workspaceFolder}",
+      "stopAtEntry": false,
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
     }
   ]
 }

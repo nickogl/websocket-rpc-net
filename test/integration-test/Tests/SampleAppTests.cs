@@ -7,7 +7,7 @@ using SampleApp;
 
 namespace Nickogl.WebSockets.Rpc.IntegrationTest.Tests;
 
-public class SampleAppTests()
+public class SampleAppTests
 {
 	[Fact]
 	public async Task BroadcastsChatMessage()
@@ -53,7 +53,7 @@ public class SampleAppTests()
 
 		await using var client2 = new ChatTestClient(app.BaseAddress);
 
-		await client2.PostMessage("Message 1");
-		await client2.PostMessage("Message 2");
+		await client2.Received.PostMessage("Message 1");
+		await client2.Received.PostMessage("Message 2");
 	}
 }

@@ -445,7 +445,37 @@ namespace {testClientModel.ClassNamespace};
 		//
 		foreach (var method in testClientModel.ServerClass.Methods)
 		{
+			var paramPrefix = method.Parameters.Length > 0 ? ", " : string.Empty;
 			testClientClass.Append(@$"
+	/// <summary>
+	/// Add a call to the '{method.Name}' procedure on the server.
+	/// </summary>
+	/// <remarks>
+	/// <para>Use this method if you want to create RPC batches.</para>
+	/// <para>This method is thread-safe for independent <see cref=""IRpcMessageWriter""/> instances.</para>
+	/// </remarks>
+	public void {method.Name}(IRpcMessageWriter __messageWriter{paramPrefix}{GetParameterList(method.Parameters)})
+	{{
+		__messageWriter.WriteMethodKey({method.Key});");
+			foreach (var param in method.Parameters)
+			{
+				var serialize = testClientModel.ServerSerializer!.Value.IsGeneric
+					? $"ServerSerializer.Serialize<{param.Type.Name}>"
+					: $"ServerSerializer.Serialize{param.Type.EscapedName}";
+				testClientClass.Append(@$"
+		__messageWriter.BeginWriteParameter();
+		{serialize}(__messageWriter.ParameterWriter, {param.Name});
+		__messageWriter.EndWriteParameter();");
+			}
+			testClientClass.Append(@$"
+	}}
+
+	/// <summary>
+	/// Call the '{method.Name}' procedure on the server.
+	/// </summary>
+	/// <remarks>This method is not thread-safe.</remarks>
+	/// <exception cref=""OperationCanceledException"">Test was cancelled.</exception>
+	/// <exception cref=""WebSocketException"">Operation on the websocket failed.</exception>
 	public async ValueTask {method.Name}({GetParameterList(method.Parameters)})
 	{{
 		Debug.Assert(_webSocket != null, _lastError);
@@ -454,18 +484,7 @@ namespace {testClientModel.ClassNamespace};
 		var __messageWriter = GetMessageWriter();
 		try
 		{{
-			__messageWriter.WriteMethodKey({method.Key});");
-			foreach (var param in method.Parameters)
-			{
-				var serialize = testClientModel.ServerSerializer!.Value.IsGeneric
-					? $"ServerSerializer.Serialize<{param.Type.Name}>"
-					: $"ServerSerializer.Serialize{param.Type.EscapedName}";
-				testClientClass.Append(@$"
-			__messageWriter.BeginWriteParameter();
-			{serialize}(__messageWriter.ParameterWriter, {param.Name});
-			__messageWriter.EndWriteParameter();");
-			}
-			testClientClass.AppendLine(@$"
+			{method.Name}(__messageWriter{paramPrefix}{GetParameterList(method.Parameters, types: false)});
 			await _webSocket.SendAsync(__messageWriter.WrittenMemory, WebSocketMessageType.Binary, true, _cts.Token);
 		}}
 		finally
@@ -587,7 +606,8 @@ namespace {testClientModel.ClassNamespace};
 				}
 				if (i != method.Parameters.Length - 1)
 				{
-					testClientClass.Append("result.Append(\", \")");
+					testClientClass.Append(@"
+				result.Append("", "");");
 				}
 			}
 			testClientClass.Append(@$"

@@ -133,7 +133,7 @@ namespace {clientModel.Class.Namespace};
 		var __messageWriter = GetMessageWriter();
 		try
 		{{
-			{method.Name}(__messageWriter, {GetParameterList(method.Parameters, types: false)});
+			{method.Name}(__messageWriter{paramPrefix}{GetParameterList(method.Parameters, types: false)});
 			await FlushAsync(__messageWriter);
 		}}
 		finally

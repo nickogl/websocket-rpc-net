@@ -1,0 +1,7 @@
+*
+!src/websocket-rpc-net
+!src/websocket-rpc-net-generator
+!test/load-test/load-test-server
+!test/load-test/load-test-client
+bin
+obj

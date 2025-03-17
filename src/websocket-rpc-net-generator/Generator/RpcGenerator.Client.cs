@@ -128,6 +128,7 @@ namespace {clientModel.Class.Namespace};
 	/// <remarks>This method is not thread-safe.</remarks>
 	/// <exception cref=""OperationCanceledException"">Client disconnected or timed out during this operation.</exception>
 	/// <exception cref=""WebSocketException"">Operation on the client's websocket failed.</exception>
+	[AsyncMethodBuilderAttribute(typeof(PoolingAsyncValueTaskMethodBuilder))]
 	public partial async ValueTask {method.Name}({GetParameterList(method.Parameters)})
 	{{
 		var __messageWriter = GetMessageWriter();

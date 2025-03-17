@@ -5,14 +5,29 @@ using System.Buffers;
 namespace SampleApp;
 
 [RpcServer<ChatClient>(RpcParameterSerialization.Specialized)]
-internal sealed partial class ChatServer(IChatServerSerializer serializer, TimeProvider timeProvider)
+internal sealed partial class ChatServer
 {
 	private readonly List<string> _messages = [];
 	private readonly List<ChatClient> _clients = [];
 
-	protected override IChatServerSerializer Serializer { get; } = serializer;
-	protected override TimeProvider? TimeProvider { get; } = timeProvider;
+	protected override IChatServerSerializer Serializer { get; }
+#if !NET9_0_OR_GREATER
+	protected override TimeProvider? TimeProvider { get; }
 	protected override TimeSpan? ClientTimeout => TimeSpan.FromSeconds(5);
+#endif
+
+#if NET9_0_OR_GREATER
+	public ChatServer(IChatServerSerializer serializer)
+	{
+		Serializer = serializer;
+	}
+#else
+	public ChatServer(IChatServerSerializer serializer, TimeProvider timeProvider)
+	{
+		Serializer = serializer;
+		TimeProvider = timeProvider;
+	}
+#endif
 
 	public IReadOnlyCollection<string> Messages => _messages;
 

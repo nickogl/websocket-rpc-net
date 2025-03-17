@@ -14,7 +14,12 @@ builder.Services
 
 var app = builder.Build();
 app.UseRouting();
-app.UseWebSockets();
+app.UseWebSockets(new()
+{
+#if NET9_0_OR_GREATER
+	KeepAliveTimeout = TimeSpan.FromSeconds(5),
+#endif
+});
 app.Use(async (context, next) =>
 {
 	if (context.WebSockets.IsWebSocketRequest)

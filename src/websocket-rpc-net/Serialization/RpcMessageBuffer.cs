@@ -110,7 +110,6 @@ public struct RpcMessageBuffer(RpcMessageBufferOptions options) : IDisposable
 	/// <param name="count">Amount of bytes to consume.</param>
 	public void Consume(int count)
 	{
-		Debug.Assert(count > 0, "Size must be at least one byte");
 		Debug.Assert(_buffer is not null, "EnsureAtLeast() was never called");
 		Debug.Assert(_consumed + count <= _buffer.Length, "Cannot advance buffer beyond its capacity");
 

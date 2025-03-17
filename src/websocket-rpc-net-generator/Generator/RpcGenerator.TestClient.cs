@@ -161,6 +161,10 @@ namespace {testClientModel.ClassNamespace};
 	/// <remarks>This allows you to control the flow of time in tests.</remarks>
 	protected virtual TimeProvider? TimeProvider => null;
 
+	/// <summary>Whether or not to intercept calls.</summary>
+	/// <remarks>False is recommended for load tests to keep memory usage low.</remarks>
+	protected virtual bool InterceptCalls {{ get; }} = true;
+
 	/// <summary>
 	/// Configure a websocket before connecting to it.
 	/// </summary>
@@ -223,13 +227,13 @@ namespace {testClientModel.ClassNamespace};
 	/// </remarks>
 	public __Receiver Received
 	{{
-		get {{ Debug.Assert(_receiver != null); return _receiver; }}
+		get {{ Debug.Assert(InterceptCalls); Debug.Assert(_receiver != null); return _receiver; }}
 	}}
 
 	/// <summary>Get and filter a collection of received calls for the individual RPC methods.</summary>
 	public __Registries ReceivedCalls
 	{{
-		get {{ Debug.Assert(_receiver != null); return _receiver.__ReceivedCalls; }}
+		get {{ Debug.Assert(InterceptCalls); Debug.Assert(_receiver != null); return _receiver.__ReceivedCalls; }}
 	}}
 
 	/// <summary>A task that completes once the client has connected to the server.</summary>
@@ -402,9 +406,12 @@ namespace {testClientModel.ClassNamespace};
 			}
 			testClientClass.Append(@$"
 								On{method.Name}({paramsList});
-								var call = new __Registries.__{method.Name}Call({paramsList});
-								__receiver.__ReceivedCalls.__All.Add(call);
-								__receiver.__ReceivedCalls.{method.Name}.AddCall(call);
+								if (InterceptCalls)
+								{{
+									var call = new __Registries.__{method.Name}Call({paramsList});
+									__receiver.__ReceivedCalls.__All.Add(call);
+									__receiver.__ReceivedCalls.{method.Name}.AddCall(call);
+								}}
 								break;
 							}}
 			");
@@ -431,7 +438,7 @@ namespace {testClientModel.ClassNamespace};
 			{{
 				if (_webSocket != null)
 				{{
-					_webSocket.Dispose();
+					try {{ _webSocket.Dispose(); }} catch {{ }} // if ClientWebSocket is aborted internally, it has already disposed of the instance
 					_webSocket = null;
 				}}
 			}}

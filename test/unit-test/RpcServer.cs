@@ -17,6 +17,7 @@ internal sealed class RpcServer : RpcServerBase<RpcClient>, IDisposable
 	public IReadOnlyCollection<string> ReceivedTexts => _receivedTexts;
 	public IReadOnlyCollection<(int x, int y, int z)> ReceivedCoordinates => _receivedCoordinates;
 
+#if !NET9_0_OR_GREATER
 	protected override TimeProvider? TimeProvider { get; }
 	protected override TimeSpan? ClientTimeout { get; }
 
@@ -25,6 +26,7 @@ internal sealed class RpcServer : RpcServerBase<RpcClient>, IDisposable
 		TimeProvider = timeProvider;
 		ClientTimeout = clientTimeout;
 	}
+#endif
 
 	public void Dispose()
 	{

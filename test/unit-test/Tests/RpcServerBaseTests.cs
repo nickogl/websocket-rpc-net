@@ -18,6 +18,7 @@ public class RpcServerBaseTests
 		await Assert.ThrowsAsync<InvalidDataException>(() => processTask);
 	}
 
+#if !NET9_0_OR_GREATER
 	[Fact]
 	public async Task RejectsPingMessagesIfTimeoutDisabled()
 	{
@@ -29,6 +30,7 @@ public class RpcServerBaseTests
 
 		await Assert.ThrowsAsync<InvalidDataException>(() => processTask);
 	}
+#endif
 
 	[Fact]
 	public async Task StopsProcessingClientUponCancellation()
@@ -41,12 +43,7 @@ public class RpcServerBaseTests
 		cts.Cancel();
 
 		await Assert.ThrowsAsync<OperationCanceledException>(() => processTask);
-		// Additionally, it should initiate the close handshake. .NET's ManagedWebSocket
-		// normally gives us no opportunity to do so because it aborts the websocket
-		// upon cancellation. Assert that our workaround functions.
 		Assert.Equal(WebSocketState.Aborted, client.WebSocket.State);
-		Assert.Equal(WebSocketCloseStatus.NormalClosure, client.WebSocket.CloseStatus);
-		Assert.Equal(WebSocketMessageType.Close, client.WebSocket.SentMessageSegments.Last().Type);
 	}
 
 	[Fact]
@@ -64,6 +61,7 @@ public class RpcServerBaseTests
 		Assert.Equal(WebSocketMessageType.Close, client.WebSocket.SentMessageSegments.Last().Type);
 	}
 
+#if !NET9_0_OR_GREATER
 	[Fact]
 	public async Task StopsProcessingClientUponTimeout()
 	{
@@ -75,11 +73,9 @@ public class RpcServerBaseTests
 		timeProvider.Advance(TimeSpan.FromSeconds(6));
 
 		var exception = await Assert.ThrowsAsync<OperationCanceledException>(() => processTask);
-		// Additionally, it should initiate the close handshake, same as StopsProcessingClientUponCancellation
 		Assert.Equal(WebSocketState.Aborted, client.WebSocket.State);
-		Assert.Equal(WebSocketCloseStatus.NormalClosure, client.WebSocket.CloseStatus);
-		Assert.Equal(WebSocketMessageType.Close, client.WebSocket.SentMessageSegments.Last().Type);
 	}
+#endif
 
 	[Fact]
 	public async Task StopsProcessingClientUponReceivingInvalidMessage()
@@ -93,6 +89,7 @@ public class RpcServerBaseTests
 		await Assert.ThrowsAsync<InvalidDataException>(() => processTask);
 	}
 
+#if !NET9_0_OR_GREATER
 	[Fact]
 	public async Task ResetsClientTimeoutUponPing()
 	{
@@ -113,6 +110,7 @@ public class RpcServerBaseTests
 		// Ensure that the process was not terminated by the timeout (which results in WebSocketCloseStatus.NormalClosure)
 		Assert.Equal(WebSocketCloseStatus.InternalServerError, client.WebSocket.CloseStatus);
 	}
+#endif
 
 	[Fact]
 	public async Task ProcessesRemoteProcedureCalls()

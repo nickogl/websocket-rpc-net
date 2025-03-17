@@ -24,6 +24,7 @@ public class SampleAppTests
 		await client3.Received.PostMessage("Hi!");
 	}
 
+#if !NET9_0_OR_GREATER
 	[Fact]
 	public async Task DisconnectsInactiveClients()
 	{
@@ -40,6 +41,7 @@ public class SampleAppTests
 
 		await client.Disconnected;
 	}
+#endif
 
 	[Fact]
 	public async Task SendsExistingMessagesUponConnecting()

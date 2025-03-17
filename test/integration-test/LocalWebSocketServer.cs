@@ -1,62 +1,57 @@
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.AspNetCore.WebSockets;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Nickogl.WebSockets.Rpc.Internal;
 using System.Net;
 using System.Net.WebSockets;
 
 namespace Nickogl.WebSockets.Rpc.IntegrationTest;
 
-public sealed class LocalWebSocketServer<T> : IDisposable where T : RpcClientBase
+public sealed class LocalWebSocketServer<T> : IAsyncDisposable where T : RpcClientBase
 {
 	private readonly CancellationTokenSource _cts = new();
-	private readonly HttpListener _httpListener;
+	private readonly WebApplication _app;
 	private readonly int _port;
 
 	public Uri BaseAddress => new UriBuilder(Uri.UriSchemeHttp, Dns.GetHostName(), _port).Uri;
 
 	public LocalWebSocketServer(RpcServerBase<T> server, Func<WebSocket, T> clientFactory)
 	{
-		Exception? lastException = null;
-		for (int port = IPEndPoint.MinPort; port <= IPEndPoint.MaxPort; port++)
+		var builder = WebApplication.CreateBuilder();
+		builder.WebHost.UseKestrel(options => options.ListenAnyIP(0));
+		builder.Services.AddWebSockets(options => { });
+
+		_app = builder.Build();
+		_app.UseRouting();
+		_app.UseWebSockets();
+		_app.Use(async (context, next) =>
 		{
-			try
+			if (context.WebSockets.IsWebSocketRequest)
 			{
-				_httpListener = new HttpListener();
-				_httpListener.Prefixes.Add($"http://+:{port}/");
-				_httpListener.Start();
-				_port = port;
-
-				_ = RunProcessingLoop(server, clientFactory, _httpListener!, _cts.Token);
-
-				return;
+				using var webSocket = await context.WebSockets.AcceptWebSocketAsync();
+				var client = clientFactory(webSocket);
+				await server.ProcessAsync(client, _cts.Token);
 			}
-			catch (Exception e)
+			else
 			{
-				lastException = e;
+				await next();
 			}
-		}
+		});
+		_app.Start();
 
-		throw lastException!;
+		_port = new Uri(_app.Services.GetRequiredService<IServer>()
+				.Features.Get<IServerAddressesFeature>()!
+				.Addresses.First())
+			.Port;
 	}
 
-	public void Dispose()
+	public ValueTask DisposeAsync()
 	{
 		_cts.Cancel();
-		_httpListener.Stop();
-	}
-
-	private static async Task RunProcessingLoop(
-		RpcServerBase<T> server,
-		Func<WebSocket, T> clientFactory,
-		HttpListener httpListener,
-		CancellationToken cancellationToken)
-	{
-		while (!cancellationToken.IsCancellationRequested)
-		{
-			var context = await httpListener.GetContextAsync();
-			if (context.Request.IsWebSocketRequest)
-			{
-				var webSocketContext = await context.AcceptWebSocketAsync(null);
-				_ = server.ProcessAsync(clientFactory(webSocketContext.WebSocket), cancellationToken);
-			}
-		}
+		return _app.DisposeAsync();
 	}
 }

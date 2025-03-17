@@ -8,6 +8,7 @@ namespace Nickogl.WebSockets.Rpc.Internal;
 /// </summary>
 public abstract partial class RpcServerBase<TClient> where TClient : RpcClientBase
 {
+#if !NET9_0_OR_GREATER
 	/// <summary>Time after which clients are disconnected if they fail to send ping frames.</summary>
 	/// <remarks>By default, this is null, which disables quick detection of disconnects.</remarks>
 	protected virtual TimeSpan? ClientTimeout => null;
@@ -15,6 +16,7 @@ public abstract partial class RpcServerBase<TClient> where TClient : RpcClientBa
 	/// <summary>Time provider to use for enforcing the <see cref="ClientTimeout"/>.</summary>
 	/// <remarks>This allows you to control the flow of time in tests.</remarks>
 	protected virtual TimeProvider? TimeProvider => null;
+#endif
 
 	/// <summary>
 	/// Called when the client is about to enter the message processing loop.

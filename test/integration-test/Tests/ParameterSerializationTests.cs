@@ -9,9 +9,7 @@ public class ParameterSerializationTests
 	[Fact]
 	public async Task SupportsGenericParameterSerialization()
 	{
-		var server = new GenericSerializationServer();
-		var clientFactory = (WebSocket webSocket) => new GenericSerializationClient(webSocket);
-		var testServer = new LocalWebSocketServer<GenericSerializationClient>(server, clientFactory);
+		await using var testServer = new LocalWebSocketServer<GenericSerializationClient>(new GenericSerializationServer(), ws => new GenericSerializationClient(ws));
 		var testClient = new GenericSerializationTestClient();
 		var event1 = new Event1() { Name = "event 1", Value = 42 };
 		var event2 = new Event2() { Name = "event 2", Value = "test" };
@@ -27,9 +25,7 @@ public class ParameterSerializationTests
 	[Fact]
 	public async Task SupportsSpecializedParameterSerialization()
 	{
-		var server = new SpecializedSerializationServer();
-		var clientFactory = (WebSocket webSocket) => new SpecializedSerializationClient(webSocket);
-		var testServer = new LocalWebSocketServer<SpecializedSerializationClient>(server, clientFactory);
+		await using var testServer = new LocalWebSocketServer<SpecializedSerializationClient>(new SpecializedSerializationServer(), ws => new SpecializedSerializationClient(ws));
 		var testClient = new SpecializedSerializationTestClient();
 		var event1 = new Event1() { Name = "event 1", Value = 42 };
 		var event2 = new Event2() { Name = "event 2", Value = "test" };

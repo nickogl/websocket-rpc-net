@@ -28,6 +28,9 @@ internal readonly record struct SerializerModel
 	/// <summary>Visibility of the serializer interface.</summary>
 	public required string InterfaceVisiblity { get; init; }
 
+	/// <summary>Whether or not to generate all methods using <c>System.Text.Json</c> serialization.</summary>
+	public required bool GenerateJsonSerializer { get; init; }
+
 	public SerializerModel(bool generic, EquatableArray<ParameterTypeModel> types)
 	{
 		if (generic && types.Length > 0)

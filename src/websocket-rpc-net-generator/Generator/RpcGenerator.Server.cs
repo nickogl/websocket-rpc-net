@@ -49,7 +49,7 @@ public partial class RpcServerGenerator
 				attribute.AttributeClass.TypeArguments[0] is not INamedTypeSymbol clientSymbolCandidate ||
 				attribute.ConstructorArguments.Length != 1 ||
 				attribute.ConstructorArguments[0].Value is not int serializationMode ||
-				serializationMode < 0 || serializationMode > 1)
+				serializationMode < 0 || serializationMode > 2)
 			{
 				return null;
 			}
@@ -58,7 +58,12 @@ public partial class RpcServerGenerator
 			{
 				if (IsRpcClientAttribute(clientAttribute))
 				{
-					return new() { ClientType = clientSymbolCandidate, UsesGenericSerialization = serializationMode == 0 };
+					return new()
+					{
+						ClientType = clientSymbolCandidate,
+						UsesGenericSerialization = serializationMode == 0 || serializationMode == 2,
+						GenerateJsonSerializer = serializationMode == 2 || serializationMode == 3,
+					};
 				}
 			}
 		}
@@ -70,9 +75,17 @@ public partial class RpcServerGenerator
 	{
 		if (serverModel.Serializer != null)
 		{
-			GenerateSerializerInterface(context, serverModel.Serializer.Value);
+			if (serverModel.Serializer.Value.GenerateJsonSerializer)
+			{
+				GenerateJsonSerializer(context, serverModel.Serializer.Value);
+			}
+			else
+			{
+				GenerateSerializerInterface(context, serverModel.Serializer.Value);
+			}
 		}
 
+		var serializerClassName = serverModel.Serializer != null ? GetFullyQualifiedType(serverModel.Serializer.Value.InterfaceNamespace, serverModel.Serializer.Value.InterfaceName) : null;
 		var serverClass = new StringBuilder(@$"
 #nullable enable
 
@@ -92,9 +105,18 @@ namespace {serverModel.Class.Namespace};
 {{");
 		if (serverModel.Serializer != null)
 		{
-			serverClass.AppendLine(@$"
+			if (serverModel.Serializer.Value.GenerateJsonSerializer)
+			{
+				serverClass.AppendLine(@$"
 	/// <summary>Serializer to deserialize parameters from RPCs received from clients.</summary>
-	protected abstract {GetFullyQualifiedType(serverModel.Serializer.Value.InterfaceNamespace, serverModel.Serializer.Value.InterfaceName)} Serializer {{ get; }}");
+	protected readonly {serializerClassName} Serializer = new();");
+			}
+			else
+			{
+				serverClass.AppendLine(@$"
+	/// <summary>Serializer to deserialize parameters from RPCs received from clients.</summary>
+	protected abstract {serializerClassName} Serializer {{ get; }}");
+			}
 		}
 		serverClass.Append(@$"
 }}

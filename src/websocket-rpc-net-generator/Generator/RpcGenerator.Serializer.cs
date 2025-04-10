@@ -71,4 +71,71 @@ namespace {serializerModel.InterfaceNamespace};
 		serializerInterface.AppendLine("}");
 		context.AddSource($"{serializerModel.InterfaceName}.g.cs", serializerInterface.ToString());
 	}
+
+	private static void GenerateJsonSerializer(SourceProductionContext context, SerializerModel serializerModel)
+	{
+		var serializerContextClass = new StringBuilder(@$"
+using System.Text.Json.Serialization;
+
+namespace {serializerModel.InterfaceNamespace};
+");
+		foreach (var type in serializerModel.Types)
+		{
+			serializerContextClass.Append(@$"
+[JsonSerializable(typeof({type.Name}), TypeInfoPropertyName = ""{type.EscapedName}"")]");
+		}
+		serializerContextClass.Append(@$"
+{serializerModel.InterfaceVisiblity} partial class {serializerModel.InterfaceName}Context : JsonSerializerContext
+{{
+}}");
+		context.AddSource($"{serializerModel.InterfaceName}Context.g.cs", serializerContextClass.ToString());
+
+		var serializerClass = new StringBuilder(@$"
+using Nickogl.WebSockets.Rpc.Serialization;
+using System.Text.Json;
+
+namespace {serializerModel.InterfaceNamespace};
+
+{serializerModel.InterfaceVisiblity} readonly struct {serializerModel.InterfaceName}
+{{");
+		if (serializerModel.SupportsSerialization)
+		{
+			serializerClass.AppendLine(@$"
+	private readonly Utf8JsonWriter _jsonWriter;
+
+	public {serializerModel.InterfaceName}()
+	{{
+		_jsonWriter = new Utf8JsonWriter(Stream.Null);
+	}}");
+		}
+
+		foreach (var type in serializerModel.Types)
+		{
+			if (serializerModel.SupportsDeserialization)
+			{
+				serializerClass.Append(@$"
+	{type.Name} Deserialize{type.EscapedName}(IRpcParameterReader reader)
+	{{
+		var jsonReader = new Utf8JsonReader(reader.Span);
+		var result = JsonSerializer.Deserialize(ref jsonReader, {serializerModel.InterfaceName}Context.Default.{type.EscapedName});");
+				if (type.Name[type.Name.Length - 1] != '?')
+				{
+					serializerClass.Append(@$"
+		if (result is null)
+		{{
+			throw new InvalidDataException(""Received null while deserializing object of type '{type.Name}'"");
+		}}");
+				}
+				serializerClass.AppendLine(@$"
+		return result;
+	}}");
+			}
+			if (serializerModel.SupportsSerialization)
+			{
+			}
+		}
+
+		serializerClass.AppendLine("}");
+		context.AddSource($"{serializerModel.InterfaceName}.g.cs", serializerClass.ToString());
+	}
 }

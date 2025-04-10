@@ -233,13 +233,15 @@ public partial class RpcServerGenerator
 			SupportsDeserialization = !isClient,
 			SupportsSerialization = isClient,
 			InterfaceNamespace = classModel.Namespace,
-			InterfaceName = $"I{classModel.Name}Serializer",
+			InterfaceName = metadata.GenerateJsonSerializer ? $"{classModel.Name}JsonSerializer" : $"I{classModel.Name}Serializer",
 			InterfaceVisiblity = classModel.Visibility,
+			GenerateJsonSerializer = metadata.GenerateJsonSerializer,
 		};
 	}
 
 	private abstract class MetadataBase
 	{
 		public required bool UsesGenericSerialization { get; init; }
+		public required bool GenerateJsonSerializer { get; init; }
 	}
 }

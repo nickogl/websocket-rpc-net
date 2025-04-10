@@ -45,12 +45,16 @@ public partial class RpcServerGenerator
 			// Abort source generation in case of invalid attribute usage
 			if (attribute.ConstructorArguments.Length != 1 ||
 				attribute.ConstructorArguments[0].Value is not int serializationMode ||
-				serializationMode < 0 || serializationMode > 1)
+				serializationMode < 0 || serializationMode > 3)
 			{
 				return null;
 			}
 
-			return new() { UsesGenericSerialization = serializationMode == 0 };
+			return new()
+			{
+				UsesGenericSerialization = serializationMode == 0 || serializationMode == 2,
+				GenerateJsonSerializer = serializationMode == 2 || serializationMode == 3,
+			};
 		}
 
 		return null;
@@ -60,7 +64,14 @@ public partial class RpcServerGenerator
 	{
 		if (clientModel.Serializer != null)
 		{
-			GenerateSerializerInterface(context, clientModel.Serializer.Value);
+			if (clientModel.Serializer.Value.GenerateJsonSerializer)
+			{
+				GenerateJsonSerializer(context, clientModel.Serializer.Value);
+			}
+			else
+			{
+				GenerateSerializerInterface(context, clientModel.Serializer.Value);
+			}
 		}
 
 		var serializerClassName = clientModel.Serializer != null ? GetFullyQualifiedType(clientModel.Serializer.Value.InterfaceNamespace, clientModel.Serializer.Value.InterfaceName) : null;
@@ -86,9 +97,18 @@ namespace {clientModel.Class.Namespace};
 {{");
 		if (clientModel.Serializer != null)
 		{
-			clientClass.AppendLine(@$"
+			if (clientModel.Serializer.Value.GenerateJsonSerializer)
+			{
+				clientClass.AppendLine(@$"
+	/// <summary>Serializer to serialize and deserialize RPC parameters.</summary>
+	protected readonly {serializerClassName} Serializer = new();");
+			}
+			else
+			{
+				clientClass.AppendLine(@$"
 	/// <summary>Serializer to serialize and deserialize RPC parameters.</summary>
 	protected abstract {serializerClassName} Serializer {{ get; }}");
+			}
 		}
 		clientClass.Append(@$"
 }}

@@ -5,6 +5,7 @@
     <RootNamespace>Nickogl.WebSockets.Rpc.IntegrationTest.Servers</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
   </PropertyGroup>
 
   <ItemGroup>

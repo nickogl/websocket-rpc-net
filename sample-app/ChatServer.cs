@@ -52,7 +52,7 @@ internal sealed partial class ChatServer
 			{
 				client.PostMessage(messageWriter, message);
 			}
-			await client.FlushAsync(messageWriter);
+			await client.SendAsync(messageWriter);
 		}
 	}
 
@@ -92,13 +92,7 @@ internal sealed partial class ChatServer
 			client.PostMessage(messageWriter, message);
 			foreach (var target in targets)
 			{
-				try
-				{
-					await target.FlushAsync(messageWriter);
-				}
-				catch (Exception)
-				{
-				}
+				await target.TrySendAsync(messageWriter);
 			}
 		}
 	}

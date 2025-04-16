@@ -54,45 +54,55 @@ static async Task RunTest(TestState state, TestOptions options, ILogger logger, 
 	var errors = new ConcurrentQueue<string>();
 	int messagesSent = 0;
 	int messagesFailed = 0;
-	var started = Stopwatch.GetTimestamp();
-	while (!cancellationToken.IsCancellationRequested)
+	var tasks = new List<Task>();
+	foreach (var batch in clients.Chunk(clients.Count / Environment.ProcessorCount))
 	{
-		try
+		async Task Run()
 		{
-			await Parallel.ForEachAsync(
-				clients,
-				new ParallelOptions() { CancellationToken = cancellationToken, MaxDegreeOfParallelism = options.MaximumConcurrentMessages },
-				async (client, cancellationToken) =>
-				{
-					if (client.Aborted)
-					{
-						return;
-					}
+			await Task.Yield();
 
-					try
+			while (!cancellationToken.IsCancellationRequested)
+			{
+				try
+				{
+					foreach (var client in batch)
 					{
-						var (x, y, z) = (Random.Shared.Next(), Random.Shared.Next(), Random.Shared.Next());
-						await client.SetPosition(x, y, z);
-						Interlocked.Increment(ref messagesSent);
+						if (client.Aborted)
+						{
+							continue;
+						}
+
+						try
+						{
+							var (x, y, z) = (Random.Shared.Next(), Random.Shared.Next(), Random.Shared.Next());
+							await client.SetPosition(x, y, z);
+							Interlocked.Increment(ref messagesSent);
+						}
+						catch (Exception e)
+						{
+							errors.Enqueue(e.Message);
+							Interlocked.Increment(ref messagesFailed);
+							client.Aborted = true;
+						}
 					}
-					catch (Exception e)
-					{
-						errors.Enqueue(e.Message);
-						Interlocked.Increment(ref messagesFailed);
-						client.Aborted = true;
-					}
-				});
+				}
+				catch (OperationCanceledException)
+				{
+					break;
+				}
+			}
 		}
-		catch (OperationCanceledException)
-		{
-			break;
-		}
+		tasks.Add(Run());
 	}
+
+	var started = Stopwatch.GetTimestamp();
+	await Task.WhenAll(tasks);
+	var duration = Stopwatch.GetElapsedTime(started);
 
 	logger.LogInformation("Publishing load test result...");
 	state.SetResult(new TestResult()
 	{
-		Duration = Stopwatch.GetElapsedTime(started),
+		Duration = duration,
 		MessagesSent = messagesSent,
 		MessagesFailed = messagesFailed,
 		MessagesReceived = clients.Sum(client => client.MessagesReceived),

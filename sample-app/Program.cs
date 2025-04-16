@@ -31,7 +31,17 @@ app.Use(async (context, next) =>
 		var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
 		using var cts = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted, lifetime.ApplicationStopping);
 		var server = app.Services.GetRequiredService<ChatServer>();
-		await server.ProcessAsync(client, cts.Token);
+		try
+		{
+			await server.ProcessAsync(client, cts.Token);
+		}
+		catch (Exception e) when (e is InvalidDataException)
+		{
+			app.Services.GetRequiredService<ILogger<Program>>().LogError(e, "Invalid data encountered");
+		}
+		catch (Exception)
+		{
+		}
 	}
 	else
 	{

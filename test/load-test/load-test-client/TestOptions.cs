@@ -27,9 +27,6 @@ internal sealed class TestOptions : IValidatableObject
 	/// <summary>Maximum concurrency when connecting to the test server.</summary>
 	public int MaximumConcurrentConnects { get; set; } = Environment.ProcessorCount;
 
-	/// <summary>Maximum concurrency when sending messages to the test server.</summary>
-	public int MaximumConcurrentMessages { get; set; } = Environment.ProcessorCount;
-
 	/// <summary>Nodes to run load tests and to collect results from.</summary>
 	/// <remarks>This list must be empty for nodes and contain at least one node for the master.</remarks>
 	public List<Node> Nodes { get; set; } = [];

@@ -23,14 +23,38 @@ public abstract class RpcClientBase
 	/// different clients to essentially broadcast a message and avoid paying for
 	/// the message serialization cost multiple times.
 	/// </remarks>
-	/// <param name="messageWriter">Message writer whose contents to flush.</param>
-	public ValueTask FlushAsync(IRpcMessageWriter messageWriter)
+	/// <param name="messageWriter">Message writer whose contents to send.</param>
+	public ValueTask SendAsync(IRpcMessageWriter messageWriter)
 	{
 		return WebSocket.SendAsync(
 			buffer: messageWriter.WrittenMemory,
 			messageType: WebSocketMessageType.Binary,
 			endOfMessage: true,
 			cancellationToken: Disconnected);
+	}
+
+	/// <summary>
+	/// Same as <see cref="SendAsync"/>, but suppresses exceptions. This is useful
+	/// for broadcasting messages. It should not stop if one of the clients disconnected
+	/// during the broadcast.
+	/// </summary>
+	/// <param name="messageWriter">Message writer whose contents to send.</param>
+	/// <returns>
+	/// <c>false</c> if sending failed due to a network error or the client disconnecting.
+	/// The client is unusable beyond this point and <see cref="RpcServerBase{TClient}.OnDisconnectedAsync"/>
+	/// either has already been called for it or will be called soon.
+	/// </returns>
+	public async ValueTask<bool> TrySendAsync(IRpcMessageWriter messageWriter)
+	{
+		try
+		{
+			await SendAsync(messageWriter);
+			return true;
+		}
+		catch (Exception)
+		{
+			return false;
+		}
 	}
 
 	/// <summary>
@@ -52,7 +76,7 @@ public abstract class RpcClientBase
 	/// <para>
 	/// Alternatively, you can create instances of <see cref="IRpcMessageWriter"/>
 	/// yourself and use the overloads that take one as their first parameter, then
-	/// call <see cref="FlushAsync"/> to send the remote procedure call(s).
+	/// call <see cref="SendAsync"/> to send the remote procedure call(s).
 	/// </para>
 	/// </remarks>
 	protected virtual IRpcMessageWriter GetMessageWriter()

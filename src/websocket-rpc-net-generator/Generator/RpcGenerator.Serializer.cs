@@ -16,7 +16,7 @@ namespace {serializerModel.InterfaceNamespace};
 /// <summary>
 /// Serialize or deserialize RPC parameters for a websocket-rpc client or server.
 /// You need to implement this interface and provide an instance of that class
-/// to the generated code by implementing the corresponding partial method.
+/// to the generated code by implementing the corresponding abstract property.
 /// </summary>
 {serializerModel.InterfaceVisiblity} interface {serializerModel.InterfaceName}
 {{");

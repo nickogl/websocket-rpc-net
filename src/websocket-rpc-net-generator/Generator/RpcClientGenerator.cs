@@ -130,9 +130,9 @@ export class {clientModel.Class.Name}SerializerBase
 		}}
 	}}
 ");
-			if (serverModel.Serializer != null)
+			if (clientModel.Serializer != null)
 			{
-				if (serverModel.Serializer.Value.IsGeneric)
+				if (clientModel.Serializer.Value.IsGeneric)
 				{
 					serializerClass.AppendLine(@$"
 	/**
@@ -147,7 +147,7 @@ export class {clientModel.Class.Name}SerializerBase
 				}
 				else
 				{
-					foreach (var type in serverModel.Serializer.Value.Types)
+					foreach (var type in clientModel.Serializer.Value.Types)
 					{
 						var methodName = $"deserialize{type.EscapedName}";
 						serializerClass.AppendLine(@$"
@@ -163,9 +163,9 @@ export class {clientModel.Class.Name}SerializerBase
 				}
 			}
 
-			if (clientModel.Serializer != null)
+			if (serverModel.Serializer != null)
 			{
-				if (clientModel.Serializer.Value.IsGeneric)
+				if (serverModel.Serializer.Value.IsGeneric)
 				{
 					serializerClass.AppendLine(@$"
 	/**
@@ -180,12 +180,12 @@ export class {clientModel.Class.Name}SerializerBase
 				}
 				else
 				{
-					foreach (var type in clientModel.Serializer.Value.Types)
+					foreach (var type in serverModel.Serializer.Value.Types)
 					{
 						var methodName = $"serialize{type.EscapedName}";
 						serializerClass.AppendLine(@$"
 	/**
-	 * Serialize data into the equivalent of the .NET type '{type.Name}' on the server.
+	 * Serialize the equivalent of the .NET type '{type.Name}' on the server to bytes.
 	 *
 	 * @abstract
 	 * @param {{any}} obj Object to serialize

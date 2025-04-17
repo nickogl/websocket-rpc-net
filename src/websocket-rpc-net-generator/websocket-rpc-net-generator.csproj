@@ -11,8 +11,9 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <IncludeSymbols>true</IncludeSymbols>
-    <PackageId>Nickogl.WebSockets.Rpc</PackageId>
+    <IncludeSymbols>false</IncludeSymbols>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <PackageId>Nickogl.WebSockets.Rpc.Generator</PackageId>
     <Version>1.0.0</Version>
     <Authors>Nicolas Kogler</Authors>
     <RepositoryUrl>https://github.com/nickogl/websocket-rpc-net</RepositoryUrl>
